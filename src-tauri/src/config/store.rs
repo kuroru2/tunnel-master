@@ -4,6 +4,43 @@ use tracing::{debug, error};
 use crate::errors::TunnelError;
 use crate::types::AppConfig;
 
+pub fn slugify(name: &str) -> String {
+    let slug: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect();
+    let mut result = String::new();
+    let mut prev_hyphen = true;
+    for c in slug.chars() {
+        if c == '-' {
+            if !prev_hyphen {
+                result.push('-');
+            }
+            prev_hyphen = true;
+        } else {
+            result.push(c);
+            prev_hyphen = false;
+        }
+    }
+    result.trim_end_matches('-').to_string()
+}
+
+pub fn generate_id(name: &str, existing_ids: &[String]) -> String {
+    let base = slugify(name);
+    if !existing_ids.contains(&base) {
+        return base;
+    }
+    let mut n = 2;
+    loop {
+        let candidate = format!("{}-{}", base, n);
+        if !existing_ids.contains(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
 pub struct ConfigStore {
     path: PathBuf,
 }
@@ -140,5 +177,43 @@ mod tests {
     fn expand_tilde_leaves_absolute_paths() {
         let expanded = ConfigStore::expand_tilde("/etc/ssh/key");
         assert_eq!(expanded, PathBuf::from("/etc/ssh/key"));
+    }
+
+    #[test]
+    fn slugify_basic() {
+        assert_eq!(slugify("ORA Web"), "ora-web");
+    }
+
+    #[test]
+    fn slugify_special_chars() {
+        assert_eq!(slugify("ORA Web (prod)"), "ora-web-prod");
+    }
+
+    #[test]
+    fn slugify_consecutive_hyphens() {
+        assert_eq!(slugify("my--tunnel---name"), "my-tunnel-name");
+    }
+
+    #[test]
+    fn slugify_leading_trailing() {
+        assert_eq!(slugify("  --hello-- "), "hello");
+    }
+
+    #[test]
+    fn generate_id_no_conflict() {
+        let existing: Vec<String> = vec![];
+        assert_eq!(generate_id("ORA Web", &existing), "ora-web");
+    }
+
+    #[test]
+    fn generate_id_with_conflict() {
+        let existing = vec!["ora-web".to_string()];
+        assert_eq!(generate_id("ORA Web", &existing), "ora-web-2");
+    }
+
+    #[test]
+    fn generate_id_multiple_conflicts() {
+        let existing = vec!["ora-web".to_string(), "ora-web-2".to_string()];
+        assert_eq!(generate_id("ORA Web", &existing), "ora-web-3");
     }
 }

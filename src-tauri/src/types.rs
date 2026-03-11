@@ -36,6 +36,44 @@ pub struct TunnelConfig {
     pub auto_connect: bool,
 }
 
+/// Input for creating/updating a tunnel — no id field
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelInput {
+    pub name: String,
+    pub host: String,
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
+    pub user: String,
+    #[serde(default)]
+    pub key_path: String,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+    #[serde(default)]
+    pub auto_connect: bool,
+}
+
+fn default_ssh_port() -> u16 { 22 }
+
+impl TunnelInput {
+    pub fn to_config(self, id: String) -> TunnelConfig {
+        TunnelConfig {
+            id,
+            name: self.name,
+            host: self.host,
+            port: self.port,
+            user: self.user,
+            key_path: self.key_path,
+            tunnel_type: TunnelType::Local,
+            local_port: self.local_port,
+            remote_host: self.remote_host,
+            remote_port: self.remote_port,
+            auto_connect: self.auto_connect,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -123,6 +161,25 @@ mod tests {
         assert_eq!(s.keepalive_timeout_secs, 30);
         assert_eq!(s.connection_timeout_secs, 10);
         assert!(!s.launch_at_login);
+    }
+
+    #[test]
+    fn tunnel_input_to_config() {
+        let input = TunnelInput {
+            name: "Test".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            user: "user".to_string(),
+            key_path: "".to_string(),
+            local_port: 5432,
+            remote_host: "db.internal".to_string(),
+            remote_port: 5432,
+            auto_connect: false,
+        };
+        let config = input.to_config("test".to_string());
+        assert_eq!(config.id, "test");
+        assert_eq!(config.tunnel_type, TunnelType::Local);
+        assert_eq!(config.name, "Test");
     }
 
     #[test]
