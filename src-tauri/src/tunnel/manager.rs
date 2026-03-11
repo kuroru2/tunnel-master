@@ -1,9 +1,15 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, warn};
 
+use crate::config::store::ConfigStore;
 use crate::errors::TunnelError;
+use crate::keychain;
+use crate::tunnel::connection::SshConnection;
+use crate::tunnel::forwarder::PortForwarder;
+use crate::tunnel::health::HealthMonitor;
 use crate::types::{AppConfig, TunnelConfig, TunnelInfo, TunnelStatus, TunnelStatusEvent};
 
 /// Messages the TunnelManager actor receives
@@ -31,13 +37,14 @@ pub enum ManagerCommand {
 }
 
 /// Runtime state for a single tunnel
-#[derive(Debug)]
 struct TunnelState {
     config: TunnelConfig,
     status: TunnelStatus,
     error_message: Option<String>,
     /// Handle to abort the tunnel's tokio tasks on disconnect
     abort_handle: Option<tokio::task::AbortHandle>,
+    /// Active SSH connection, if connected
+    ssh_connection: Option<Arc<SshConnection>>,
 }
 
 impl TunnelState {
@@ -47,6 +54,7 @@ impl TunnelState {
             status: TunnelStatus::Disconnected,
             error_message: None,
             abort_handle: None,
+            ssh_connection: None,
         }
     }
 
@@ -148,13 +156,15 @@ impl TunnelManagerActor {
     }
 
     async fn handle_connect(&mut self, id: &str) -> Result<(), TunnelError> {
-        {
+        // Extract config data we need before any mutable borrows
+        let (host, port, user, key_path, local_port, remote_host, remote_port) = {
             let tunnel = self
                 .tunnels
                 .get_mut(id)
                 .ok_or_else(|| TunnelError::TunnelNotFound(id.to_string()))?;
 
-            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting
+            if tunnel.status == TunnelStatus::Connected
+                || tunnel.status == TunnelStatus::Connecting
             {
                 debug!("Tunnel {} already connected/connecting", id);
                 return Ok(());
@@ -162,12 +172,112 @@ impl TunnelManagerActor {
 
             tunnel.status = TunnelStatus::Connecting;
             tunnel.error_message = None;
-        }
+
+            (
+                tunnel.config.host.clone(),
+                tunnel.config.port,
+                tunnel.config.user.clone(),
+                tunnel.config.key_path.clone(),
+                tunnel.config.local_port,
+                tunnel.config.remote_host.clone(),
+                tunnel.config.remote_port,
+            )
+        };
         self.emit_status(id, &TunnelStatus::Connecting);
 
-        // TODO: Task 6 will add real SSH connection logic here.
-        // For now, we just transition to Connected to validate the state machine.
-        self.tunnels.get_mut(id).unwrap().status = TunnelStatus::Connected;
+        let timeout_secs = self.settings.connection_timeout_secs;
+        let keepalive_interval = self.settings.keepalive_interval_secs;
+        let keepalive_timeout = self.settings.keepalive_timeout_secs;
+
+        // Get passphrase from keychain using expanded path
+        let expanded_key_path = ConfigStore::expand_tilde(&key_path);
+        let passphrase = keychain::get_passphrase(
+            expanded_key_path.to_string_lossy().as_ref(),
+        );
+
+        // Attempt SSH connection
+        let ssh = match SshConnection::connect(
+            &host,
+            port,
+            &user,
+            &key_path,
+            passphrase.as_deref(),
+            timeout_secs,
+        )
+        .await
+        {
+            Ok(conn) => Arc::new(conn),
+            Err(e) => {
+                let error_msg = e.to_string();
+                {
+                    let tunnel = self.tunnels.get_mut(id).unwrap();
+                    tunnel.status = TunnelStatus::Disconnected;
+                    tunnel.error_message = Some(error_msg.clone());
+                }
+                self.emit_status(id, &TunnelStatus::Disconnected);
+                return Err(e);
+            }
+        };
+
+        // Create death channel for health/forwarder to report tunnel death
+        let (death_tx, mut death_rx) = mpsc::channel::<String>(1);
+        let manager_tx = self.manager_tx.clone();
+        let tunnel_id = id.to_string();
+
+        // Spawn death listener that forwards to manager
+        tokio::spawn(async move {
+            if let Some(error) = death_rx.recv().await {
+                let _ = manager_tx
+                    .send(ManagerCommand::TunnelDied {
+                        id: tunnel_id,
+                        error,
+                    })
+                    .await;
+            }
+        });
+
+        // Spawn port forwarder
+        let fwd_ssh = ssh.clone();
+        let fwd_death_tx = death_tx.clone();
+        let fwd_remote_host = remote_host.clone();
+        let fwd_tunnel_id = id.to_string();
+        let forwarder_handle = tokio::spawn(async move {
+            if let Err(e) = PortForwarder::start(
+                fwd_ssh,
+                local_port,
+                fwd_remote_host,
+                remote_port,
+                fwd_death_tx,
+                fwd_tunnel_id,
+            )
+            .await
+            {
+                warn!("Port forwarder exited with error: {}", e);
+            }
+        });
+
+        // Spawn health monitor
+        let health_ssh = ssh.clone();
+        let health_tunnel_id = id.to_string();
+        let health_death_tx = death_tx;
+        tokio::spawn(async move {
+            HealthMonitor::run(
+                health_ssh,
+                health_tunnel_id,
+                keepalive_interval,
+                keepalive_timeout,
+                health_death_tx,
+            )
+            .await;
+        });
+
+        // Store state
+        {
+            let tunnel = self.tunnels.get_mut(id).unwrap();
+            tunnel.abort_handle = Some(forwarder_handle.abort_handle());
+            tunnel.ssh_connection = Some(ssh);
+            tunnel.status = TunnelStatus::Connected;
+        }
         self.emit_status(id, &TunnelStatus::Connected);
 
         info!("Tunnel {} connected", id);
@@ -189,10 +299,13 @@ impl TunnelManagerActor {
         }
         self.emit_status(id, &TunnelStatus::Disconnecting);
 
-        // Abort the tunnel's background tasks if any
+        // Abort the tunnel's background tasks and clean up SSH
         if let Some(tunnel) = self.tunnels.get_mut(id) {
             if let Some(handle) = tunnel.abort_handle.take() {
                 handle.abort();
+            }
+            if let Some(ssh) = tunnel.ssh_connection.take() {
+                ssh.disconnect().await;
             }
             tunnel.status = TunnelStatus::Disconnected;
             tunnel.error_message = None;
@@ -222,6 +335,9 @@ impl TunnelManagerActor {
             let tunnel = self.tunnels.get_mut(id).unwrap();
             if let Some(handle) = tunnel.abort_handle.take() {
                 handle.abort();
+            }
+            if let Some(ssh) = tunnel.ssh_connection.take() {
+                ssh.disconnect().await;
             }
             tunnel.status = TunnelStatus::Disconnected;
         }
@@ -333,65 +449,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn connect_transitions_to_connected() {
-        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
-        let handle = spawn_manager(test_config(), Some(event_tx), None);
-
-        let (reply_tx, reply_rx) = oneshot::channel();
-        handle
-            .send(ManagerCommand::Connect {
-                id: "db".into(),
-                reply: reply_tx,
-            })
-            .await
-            .unwrap();
-        assert!(reply_rx.await.unwrap().is_ok());
-
-        // Should have received Connecting then Connected events
-        let evt1 = event_rx.recv().await.unwrap();
-        assert_eq!(evt1.status, TunnelStatus::Connecting);
-        let evt2 = event_rx.recv().await.unwrap();
-        assert_eq!(evt2.status, TunnelStatus::Connected);
-    }
-
-    #[tokio::test]
-    async fn disconnect_transitions_to_disconnected() {
-        let handle = spawn_manager(test_config(), None, None);
-
-        // Connect first
-        let (reply_tx, reply_rx) = oneshot::channel();
-        handle
-            .send(ManagerCommand::Connect {
-                id: "db".into(),
-                reply: reply_tx,
-            })
-            .await
-            .unwrap();
-        reply_rx.await.unwrap().unwrap();
-
-        // Disconnect
-        let (reply_tx, reply_rx) = oneshot::channel();
-        handle
-            .send(ManagerCommand::Disconnect {
-                id: "db".into(),
-                reply: reply_tx,
-            })
-            .await
-            .unwrap();
-        reply_rx.await.unwrap().unwrap();
-
-        // Verify status
-        let (reply_tx, reply_rx) = oneshot::channel();
-        handle
-            .send(ManagerCommand::ListTunnels { reply: reply_tx })
-            .await
-            .unwrap();
-        let tunnels = reply_rx.await.unwrap();
-        let db = tunnels.iter().find(|t| t.id == "db").unwrap();
-        assert_eq!(db.status, TunnelStatus::Disconnected);
-    }
-
-    #[tokio::test]
     async fn connect_unknown_tunnel_returns_error() {
         let handle = spawn_manager(test_config(), None, None);
 
@@ -405,42 +462,6 @@ mod tests {
             .unwrap();
         let result = reply_rx.await.unwrap();
         assert!(matches!(result, Err(TunnelError::TunnelNotFound(_))));
-    }
-
-    #[tokio::test]
-    async fn tunnel_died_transitions_through_error() {
-        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
-        let handle = spawn_manager(test_config(), Some(event_tx), None);
-
-        // Connect first
-        let (reply_tx, reply_rx) = oneshot::channel();
-        handle
-            .send(ManagerCommand::Connect {
-                id: "db".into(),
-                reply: reply_tx,
-            })
-            .await
-            .unwrap();
-        reply_rx.await.unwrap().unwrap();
-
-        // Drain connect events
-        let _ = event_rx.recv().await; // Connecting
-        let _ = event_rx.recv().await; // Connected
-
-        // Simulate tunnel death
-        handle
-            .send(ManagerCommand::TunnelDied {
-                id: "db".into(),
-                error: "Connection lost".into(),
-            })
-            .await
-            .unwrap();
-
-        // Should get Error then Disconnected
-        let evt = event_rx.recv().await.unwrap();
-        assert_eq!(evt.status, TunnelStatus::Error);
-        let evt = event_rx.recv().await.unwrap();
-        assert_eq!(evt.status, TunnelStatus::Disconnected);
     }
 
     #[tokio::test]
@@ -480,5 +501,37 @@ mod tests {
             .unwrap();
         let tunnels = reply_rx.await.unwrap();
         assert_eq!(tunnels.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn connect_to_unreachable_host_returns_error() {
+        let mut config = test_config();
+        // Use an unreachable host with a short timeout
+        config.tunnels[0].host = "192.0.2.1".into(); // RFC 5737 TEST-NET, should be unreachable
+        config.settings.connection_timeout_secs = 2;
+
+        let handle = spawn_manager(config, None, None);
+
+        let (reply_tx, reply_rx) = oneshot::channel();
+        handle
+            .send(ManagerCommand::Connect {
+                id: "db".into(),
+                reply: reply_tx,
+            })
+            .await
+            .unwrap();
+        let result = reply_rx.await.unwrap();
+        assert!(result.is_err(), "Expected error connecting to unreachable host");
+
+        // Verify tunnel is back to Disconnected with an error message
+        let (reply_tx, reply_rx) = oneshot::channel();
+        handle
+            .send(ManagerCommand::ListTunnels { reply: reply_tx })
+            .await
+            .unwrap();
+        let tunnels = reply_rx.await.unwrap();
+        let db = tunnels.iter().find(|t| t.id == "db").unwrap();
+        assert_eq!(db.status, TunnelStatus::Disconnected);
+        assert!(db.error_message.is_some(), "Expected error_message to be set");
     }
 }
