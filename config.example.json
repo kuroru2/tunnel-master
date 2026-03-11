@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "tunnels": [
+    {
+      "id": "dev-db",
+      "name": "Dev Database",
+      "host": "bastion.example.com",
+      "port": 22,
+      "user": "sergio",
+      "keyPath": "~/.ssh/id_rsa",
+      "type": "local",
+      "localPort": 5432,
+      "remoteHost": "db.internal",
+      "remotePort": 5432,
+      "autoConnect": false
+    },
+    {
+      "id": "dev-redis",
+      "name": "Dev Redis",
+      "host": "bastion.example.com",
+      "port": 22,
+      "user": "sergio",
+      "keyPath": "~/.ssh/id_rsa",
+      "type": "local",
+      "localPort": 6379,
+      "remoteHost": "redis.internal",
+      "remotePort": 6379,
+      "autoConnect": false
+    }
+  ],
+  "settings": {
+    "keepaliveIntervalSecs": 15,
+    "keepaliveTimeoutSecs": 30,
+    "connectionTimeoutSecs": 10,
+    "launchAtLogin": false
+  }
+}
