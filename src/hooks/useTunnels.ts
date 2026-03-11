@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { TunnelInfo, TunnelStatusEvent } from "../types";
+import type { TunnelInfo, TunnelStatusEvent, TunnelConfig, TunnelInput } from "../types";
 
 export function useTunnels() {
   const [tunnels, setTunnels] = useState<TunnelInfo[]>([]);
@@ -92,6 +92,43 @@ export function useTunnels() {
     }
   }, [fetchTunnels]);
 
+  const addTunnel = useCallback(async (input: TunnelInput) => {
+    try {
+      setError(null);
+      await invoke("add_tunnel", { input });
+      await fetchTunnels();
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  }, [fetchTunnels]);
+
+  const updateTunnel = useCallback(async (id: string, input: TunnelInput) => {
+    try {
+      setError(null);
+      await invoke("update_tunnel", { id, input });
+      await fetchTunnels();
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  }, [fetchTunnels]);
+
+  const deleteTunnel = useCallback(async (id: string) => {
+    try {
+      setError(null);
+      await invoke("delete_tunnel", { id });
+      await fetchTunnels();
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  }, [fetchTunnels]);
+
+  const getTunnelConfig = useCallback(async (id: string): Promise<TunnelConfig> => {
+    return await invoke<TunnelConfig>("get_tunnel_config", { id });
+  }, []);
+
   return {
     tunnels,
     loading,
@@ -102,5 +139,9 @@ export function useTunnels() {
     passphrasePrompt,
     submitPassphrase,
     cancelPassphrase,
+    addTunnel,
+    updateTunnel,
+    deleteTunnel,
+    getTunnelConfig,
   };
 }

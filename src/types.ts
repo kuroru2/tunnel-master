@@ -26,3 +26,29 @@ export interface TunnelErrorEvent {
   message: string;
   code: string;
 }
+
+export interface TunnelInput {
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  keyPath: string;
+  localPort: number;
+  remoteHost: string;
+  remotePort: number;
+  autoConnect: boolean;
+}
+
+export interface TunnelConfig {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  keyPath: string;
+  type: "local" | "reverse" | "dynamic";
+  localPort: number;
+  remoteHost: string;
+  remotePort: number;
+  autoConnect: boolean;
+}
