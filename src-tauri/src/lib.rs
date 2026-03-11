@@ -1,3 +1,10 @@
+mod config;
+mod commands;
+mod errors;
+mod keychain;
+mod tunnel;
+pub mod types;
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter("tunnel_master=debug")
