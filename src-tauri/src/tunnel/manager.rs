@@ -39,6 +39,22 @@ pub enum ManagerCommand {
         error: String,
         generation: u64,
     },
+    AddTunnel {
+        config: TunnelConfig,
+        reply: oneshot::Sender<Result<TunnelInfo, TunnelError>>,
+    },
+    UpdateTunnel {
+        config: TunnelConfig,
+        reply: oneshot::Sender<Result<TunnelInfo, TunnelError>>,
+    },
+    RemoveTunnel {
+        id: String,
+        reply: oneshot::Sender<Result<(), TunnelError>>,
+    },
+    GetTunnelConfig {
+        id: String,
+        reply: oneshot::Sender<Result<TunnelConfig, TunnelError>>,
+    },
 }
 
 /// Runtime state for a single tunnel
@@ -163,6 +179,29 @@ impl TunnelManagerActor {
 
                 ManagerCommand::TunnelDied { id, error, generation } => {
                     self.handle_tunnel_died(&id, &error, generation).await;
+                }
+
+                ManagerCommand::AddTunnel { config, reply } => {
+                    let result = self.handle_add_tunnel(config);
+                    let _ = reply.send(result);
+                }
+
+                ManagerCommand::UpdateTunnel { config, reply } => {
+                    let result = self.handle_update_tunnel(config).await;
+                    let _ = reply.send(result);
+                }
+
+                ManagerCommand::RemoveTunnel { id, reply } => {
+                    let result = self.handle_remove_tunnel(&id).await;
+                    let _ = reply.send(result);
+                }
+
+                ManagerCommand::GetTunnelConfig { id, reply } => {
+                    let result = match self.tunnels.get(&id) {
+                        Some(t) => Ok(t.config.clone()),
+                        None => Err(TunnelError::TunnelNotFound(id)),
+                    };
+                    let _ = reply.send(result);
                 }
             }
         }
@@ -382,6 +421,59 @@ impl TunnelManagerActor {
             tunnel.status = TunnelStatus::Disconnected;
         }
         self.emit_status(id, &TunnelStatus::Disconnected);
+    }
+
+    fn handle_add_tunnel(&mut self, config: TunnelConfig) -> Result<TunnelInfo, TunnelError> {
+        if self.tunnels.contains_key(&config.id) {
+            return Err(TunnelError::ConfigInvalid(
+                format!("Tunnel '{}' already exists", config.id),
+            ));
+        }
+        let state = TunnelState::new(config);
+        let info = state.to_info();
+        self.tunnels.insert(info.id.clone(), state);
+        info!("Added tunnel '{}'", info.id);
+        Ok(info)
+    }
+
+    async fn handle_update_tunnel(&mut self, config: TunnelConfig) -> Result<TunnelInfo, TunnelError> {
+        let id = config.id.clone();
+
+        // Disconnect if currently connected
+        if let Some(tunnel) = self.tunnels.get(&id) {
+            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting {
+                info!("Disconnecting tunnel '{}' before update", id);
+                self.handle_disconnect(&id).await.ok();
+            }
+        } else {
+            return Err(TunnelError::TunnelNotFound(id));
+        }
+
+        // Replace with new config, reset state
+        let state = TunnelState::new(config);
+        let info = state.to_info();
+        self.tunnels.insert(id.clone(), state);
+        self.emit_status(&id, &TunnelStatus::Disconnected);
+        info!("Updated tunnel '{}'", id);
+        Ok(info)
+    }
+
+    async fn handle_remove_tunnel(&mut self, id: &str) -> Result<(), TunnelError> {
+        // Disconnect if currently connected
+        if let Some(tunnel) = self.tunnels.get(id) {
+            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting {
+                info!("Disconnecting tunnel '{}' before removal", id);
+                self.handle_disconnect(id).await.ok();
+            }
+        }
+
+        match self.tunnels.remove(id) {
+            Some(_) => {
+                info!("Removed tunnel '{}'", id);
+                Ok(())
+            }
+            None => Err(TunnelError::TunnelNotFound(id.to_string())),
+        }
     }
 
     fn handle_reload(&mut self, config: AppConfig) -> Result<(), TunnelError> {
