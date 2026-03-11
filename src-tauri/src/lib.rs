@@ -203,6 +203,10 @@ pub fn run() {
             commands::disconnect_tunnel,
             commands::store_passphrase_for_tunnel,
             commands::reload_config,
+            commands::add_tunnel,
+            commands::update_tunnel,
+            commands::delete_tunnel,
+            commands::get_tunnel_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
