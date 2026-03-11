@@ -17,6 +17,8 @@ SSH tunnels for development (databases, caches, internal services) require manua
 | Config | Self-contained JSON | No dependency on `~/.ssh/config`, evolves toward Termius model |
 | Auth (POC) | SSH keys + passphrase via macOS Keychain | Covers most real-world setups |
 | Tunnel type (POC) | Local port forwarding (`-L`) | Most common use case |
+| Frontend | Vite + React + Tailwind CSS | Fast dev server, minimal config, utility-first styling |
+| Logging | `tracing` + `tracing-subscriber` | Structured logging for connection lifecycle debugging |
 
 ## Architecture
 
@@ -29,17 +31,47 @@ SSH tunnels for development (databases, caches, internal services) require manua
 - `useTunnels.ts` — hook bridging Tauri IPC commands and events
 
 **Core Layer (Rust)**
-- `TunnelManager` — owns all tunnel lifecycle; maps tunnel IDs to active connections; coordinates connect/disconnect operations
+- `TunnelManager` — owns all tunnel lifecycle; maps tunnel IDs to active connections; coordinates connect/disconnect operations. Runs as a dedicated tokio task receiving messages over an `mpsc` channel. Tauri commands send messages to the manager; the manager processes them sequentially, eliminating shared mutable state. Each tunnel's `SshConnection` and `PortForwarder` run as independent tokio tasks.
 - `SshConnection` — wraps `russh` client; handles TCP connection, SSH handshake, and authentication
 - `PortForwarder` — binds a local TCP port, accepts connections, pipes data through the SSH channel to the remote host:port
-- `HealthMonitor` — sends SSH keepalive pings on an interval; detects dead connections (missed pings, TCP errors); triggers graceful cleanup
-- `ConfigStore` — reads/writes/validates the JSON config file
+- `HealthMonitor` — one per tunnel, spawned by `TunnelManager` when a tunnel enters Connected state. Sends SSH keepalive pings on an interval; detects dead connections (missed pings, TCP errors); notifies `TunnelManager` to trigger graceful cleanup
+- `ConfigStore` — reads/writes/validates the JSON config file. Expands `~` in paths using `dirs::home_dir()`. Rejects configs with unknown `version` values.
 - `keychain.rs` — macOS Keychain integration for SSH key passphrases
 
 ### Communication
 
-- **Frontend → Backend:** Tauri commands (IPC). Frontend calls Rust functions like `connect_tunnel(id)`, `disconnect_tunnel(id)`, `list_tunnels()`.
-- **Backend → Frontend:** Tauri events. Rust pushes status updates (`tunnel-status-changed`, `tunnel-error`) that the frontend subscribes to.
+- **Frontend → Backend:** Tauri commands (IPC). Frontend calls Rust functions like `connect_tunnel(id)`, `disconnect_tunnel(id)`, `list_tunnels()`, `reload_config()`.
+- **Backend → Frontend:** Tauri events. Rust pushes status updates that the frontend subscribes to.
+
+### Tauri Commands
+
+| Command | Args | Returns | Description |
+|---------|------|---------|-------------|
+| `list_tunnels` | — | `Vec<TunnelInfo>` | List all tunnels with current status |
+| `connect_tunnel` | `id: String` | `Result<(), TunnelError>` | Start a tunnel |
+| `disconnect_tunnel` | `id: String` | `Result<(), TunnelError>` | Stop a tunnel gracefully |
+| `reload_config` | — | `Result<(), TunnelError>` | Re-read config from disk, update tunnel list |
+
+### Tauri Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `tunnel-status-changed` | `{ id: String, status: TunnelStatus, timestamp: u64 }` | Tunnel state transition |
+| `tunnel-error` | `{ id: String, message: String, code: String }` | Error occurred on a tunnel |
+
+### Error Type
+
+```rust
+enum TunnelError {
+    ConfigNotFound,
+    ConfigInvalid(String),
+    AuthFailed(String),
+    PortInUse(u16),
+    ConnectionTimeout,
+    SshError(String),
+    TunnelNotFound(String),
+}
+```
 
 ## Tunnel Lifecycle
 
@@ -89,7 +121,8 @@ Location: `~/.tunnel-master/config.json`
   ],
   "settings": {
     "keepaliveIntervalSecs": 15,
-    "connectionTimeoutSecs": 30,
+    "keepaliveTimeoutSecs": 30,
+    "connectionTimeoutSecs": 10,
     "launchAtLogin": false
   }
 }
@@ -105,7 +138,8 @@ Fields:
 - `remoteHost`, `remotePort` — destination on the remote network
 - `autoConnect` — connect automatically on app launch (post-POC)
 - `settings.keepaliveIntervalSecs` — how often to send SSH keepalive
-- `settings.connectionTimeoutSecs` — how long to wait before declaring connection dead
+- `settings.keepaliveTimeoutSecs` — how long without a keepalive response before declaring connection dead
+- `settings.connectionTimeoutSecs` — max time to wait for initial SSH handshake
 
 ## Project Structure
 
