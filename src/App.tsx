@@ -1,6 +1,15 @@
+import { useState } from "react";
 import { TunnelList } from "./components/TunnelList";
 import { PassphraseDialog } from "./components/PassphraseDialog";
+import { EditList } from "./components/EditList";
+import { EditForm } from "./components/EditForm";
 import { useTunnels } from "./hooks/useTunnels";
+import type { TunnelInput } from "./types";
+
+type View =
+  | { kind: "normal" }
+  | { kind: "edit-list" }
+  | { kind: "edit-form"; tunnelId: string | null };
 
 function App() {
   const {
@@ -12,8 +21,49 @@ function App() {
     passphrasePrompt,
     submitPassphrase,
     cancelPassphrase,
+    addTunnel,
+    updateTunnel,
+    deleteTunnel,
+    getTunnelConfig,
   } = useTunnels();
 
+  const [view, setView] = useState<View>({ kind: "normal" });
+
+  const handleSave = async (input: TunnelInput, id: string | null) => {
+    if (id) {
+      await updateTunnel(id, input);
+    } else {
+      await addTunnel(input);
+    }
+    setView({ kind: "edit-list" });
+  };
+
+  // Edit list view
+  if (view.kind === "edit-list") {
+    return (
+      <EditList
+        tunnels={tunnels}
+        onEdit={(id) => setView({ kind: "edit-form", tunnelId: id })}
+        onAdd={() => setView({ kind: "edit-form", tunnelId: null })}
+        onDelete={deleteTunnel}
+        onDone={() => setView({ kind: "normal" })}
+      />
+    );
+  }
+
+  // Edit form view
+  if (view.kind === "edit-form") {
+    return (
+      <EditForm
+        tunnelId={view.tunnelId}
+        getTunnelConfig={getTunnelConfig}
+        onSave={handleSave}
+        onBack={() => setView({ kind: "edit-list" })}
+      />
+    );
+  }
+
+  // Normal view
   const connectedCount = tunnels.filter((t) => t.status === "connected").length;
   const totalCount = tunnels.length;
 
@@ -27,6 +77,12 @@ function App() {
             {connectedCount}/{totalCount} active
           </p>
         </div>
+        <button
+          onClick={() => setView({ kind: "edit-list" })}
+          className="text-sm text-blue-400 hover:text-blue-300"
+        >
+          Edit
+        </button>
       </div>
 
       {/* Error banner */}
