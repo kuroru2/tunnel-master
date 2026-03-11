@@ -77,6 +77,27 @@ impl ConfigStore {
         Ok(config)
     }
 
+    pub fn save(&self, config: &AppConfig) -> Result<(), TunnelError> {
+        // Ensure parent directory exists
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| TunnelError::ConfigInvalid(format!("Cannot create config dir: {}", e)))?;
+        }
+
+        let json = serde_json::to_string_pretty(config)
+            .map_err(|e| TunnelError::ConfigInvalid(format!("Serialization error: {}", e)))?;
+
+        // Atomic write: write to temp file, then rename
+        let tmp_path = self.path.with_extension("json.tmp");
+        std::fs::write(&tmp_path, &json)
+            .map_err(|e| TunnelError::ConfigInvalid(format!("Write error: {}", e)))?;
+        std::fs::rename(&tmp_path, &self.path)
+            .map_err(|e| TunnelError::ConfigInvalid(format!("Rename error: {}", e)))?;
+
+        debug!("Saved config with {} tunnels", config.tunnels.len());
+        Ok(())
+    }
+
     pub fn expand_tilde(path: &str) -> PathBuf {
         if path.starts_with("~/") {
             if let Some(home) = dirs::home_dir() {
@@ -90,6 +111,7 @@ impl ConfigStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Settings;
     use std::fs;
     use tempfile::TempDir;
 
@@ -215,5 +237,39 @@ mod tests {
     fn generate_id_multiple_conflicts() {
         let existing = vec!["ora-web".to_string(), "ora-web-2".to_string()];
         assert_eq!(generate_id("ORA Web", &existing), "ora-web-3");
+    }
+
+    #[test]
+    fn save_and_reload() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.json");
+        fs::write(&path, sample_config_json()).unwrap();
+
+        let store = ConfigStore::new(path);
+        let mut config = store.load().unwrap();
+
+        config.tunnels[0].name = "Modified".to_string();
+        store.save(&config).unwrap();
+
+        let reloaded = store.load().unwrap();
+        assert_eq!(reloaded.tunnels[0].name, "Modified");
+    }
+
+    #[test]
+    fn save_creates_parent_dirs() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("subdir").join("config.json");
+
+        let store = ConfigStore::new(path.clone());
+        let config = AppConfig {
+            version: 1,
+            tunnels: vec![],
+            settings: Settings::default(),
+        };
+        store.save(&config).unwrap();
+
+        assert!(path.exists());
+        let reloaded = store.load().unwrap();
+        assert_eq!(reloaded.tunnels.len(), 0);
     }
 }
