@@ -3,6 +3,7 @@ use tracing::{debug, error};
 
 use crate::errors::TunnelError;
 use crate::types::AppConfig;
+use crate::types::TunnelInput;
 
 pub fn slugify(name: &str) -> String {
     let slug: String = name
@@ -106,6 +107,62 @@ impl ConfigStore {
         }
         PathBuf::from(path)
     }
+}
+
+/// Validate tunnel input. `existing_ports` is a list of (id, localPort) for conflict checking.
+/// `exclude_id` is set when updating — the tunnel's own port is excluded from conflict check.
+pub fn validate_tunnel_input(
+    input: &TunnelInput,
+    existing_ports: &[(String, u16)],
+    exclude_id: Option<&str>,
+) -> Result<(), TunnelError> {
+    if input.name.trim().is_empty() {
+        return Err(TunnelError::ConfigInvalid("name is required".to_string()));
+    }
+    if input.host.trim().is_empty() {
+        return Err(TunnelError::ConfigInvalid("host is required".to_string()));
+    }
+    if input.user.trim().is_empty() {
+        return Err(TunnelError::ConfigInvalid("user is required".to_string()));
+    }
+    if input.port == 0 {
+        return Err(TunnelError::ConfigInvalid("port must be 1-65535".to_string()));
+    }
+    if input.local_port == 0 {
+        return Err(TunnelError::ConfigInvalid("localPort must be 1-65535".to_string()));
+    }
+    if input.remote_host.trim().is_empty() {
+        return Err(TunnelError::ConfigInvalid("remoteHost is required".to_string()));
+    }
+    if input.remote_port == 0 {
+        return Err(TunnelError::ConfigInvalid("remotePort must be 1-65535".to_string()));
+    }
+
+    // Check localPort conflict with other tunnels
+    for (id, port) in existing_ports {
+        if *port == input.local_port {
+            if let Some(excl) = exclude_id {
+                if id == excl {
+                    continue;
+                }
+            }
+            return Err(TunnelError::ConfigInvalid(
+                format!("localPort {} is already used by tunnel '{}'", input.local_port, id),
+            ));
+        }
+    }
+
+    // Validate keyPath if provided
+    if !input.key_path.is_empty() {
+        let expanded = ConfigStore::expand_tilde(&input.key_path);
+        if !expanded.exists() {
+            return Err(TunnelError::ConfigInvalid(
+                format!("keyPath '{}' does not exist", input.key_path),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -253,6 +310,93 @@ mod tests {
 
         let reloaded = store.load().unwrap();
         assert_eq!(reloaded.tunnels[0].name, "Modified");
+    }
+
+    use crate::types::TunnelInput;
+
+    #[test]
+    fn validate_input_valid() {
+        let input = TunnelInput {
+            name: "Test".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            user: "user".to_string(),
+            key_path: "".to_string(),
+            local_port: 5432,
+            remote_host: "db.internal".to_string(),
+            remote_port: 5432,
+            auto_connect: false,
+        };
+        assert!(validate_tunnel_input(&input, &[], None).is_ok());
+    }
+
+    #[test]
+    fn validate_input_empty_name() {
+        let input = TunnelInput {
+            name: "".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            user: "user".to_string(),
+            key_path: "".to_string(),
+            local_port: 5432,
+            remote_host: "db.internal".to_string(),
+            remote_port: 5432,
+            auto_connect: false,
+        };
+        let err = validate_tunnel_input(&input, &[], None).unwrap_err();
+        assert!(err.to_string().contains("name"));
+    }
+
+    #[test]
+    fn validate_input_port_conflict() {
+        let input = TunnelInput {
+            name: "Test".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            user: "user".to_string(),
+            key_path: "".to_string(),
+            local_port: 5432,
+            remote_host: "db.internal".to_string(),
+            remote_port: 5432,
+            auto_connect: false,
+        };
+        let existing = vec![("other".to_string(), 5432u16)];
+        let err = validate_tunnel_input(&input, &existing, None).unwrap_err();
+        assert!(err.to_string().contains("5432"));
+    }
+
+    #[test]
+    fn validate_input_port_conflict_self_excluded() {
+        let input = TunnelInput {
+            name: "Test".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            user: "user".to_string(),
+            key_path: "".to_string(),
+            local_port: 5432,
+            remote_host: "db.internal".to_string(),
+            remote_port: 5432,
+            auto_connect: false,
+        };
+        let existing = vec![("self-id".to_string(), 5432u16)];
+        assert!(validate_tunnel_input(&input, &existing, Some("self-id")).is_ok());
+    }
+
+    #[test]
+    fn validate_input_port_zero() {
+        let input = TunnelInput {
+            name: "Test".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            user: "user".to_string(),
+            key_path: "".to_string(),
+            local_port: 0,
+            remote_host: "db.internal".to_string(),
+            remote_port: 5432,
+            auto_connect: false,
+        };
+        let err = validate_tunnel_input(&input, &[], None).unwrap_err();
+        assert!(err.to_string().contains("localPort"));
     }
 
     #[test]
