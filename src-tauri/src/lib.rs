@@ -12,10 +12,27 @@ use types::{TunnelStatus, TunnelStatusEvent};
 
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder},
     Emitter,
     Manager,
 };
+
+use tauri_nspanel::ManagerExt as PanelManagerExt;
+use tauri_nspanel::WebviewWindowExt as PanelWindowExt;
+
+// Define panel + event handler together (imports NSNotification etc. via tauri_panel! wrapper)
+tauri_nspanel::tauri_panel! {
+    panel!(TunnelPanel {
+        config: {
+            can_become_key_window: true,
+            is_floating_panel: true
+        }
+    })
+
+    panel_event!(TunnelPanelHandler {
+        window_did_resign_key(notification: &NSNotification) -> ()
+    })
+}
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -33,9 +50,50 @@ pub fn run() {
     });
 
     tauri::Builder::default()
+        .plugin(tauri_nspanel::init())
         .setup(move |app| {
+            // No dock icon, no space switching on activation
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let quit = MenuItem::with_id(app, "quit", "Quit Tunnel Master", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
+
+            // Convert the main window to an NSPanel
+            if let Some(window) = app.get_webview_window("main") {
+                let panel = window.to_panel::<TunnelPanel>()?;
+
+                // NonactivatingPanel — appears without activating the app (no space switch)
+                panel.set_style_mask(
+                    tauri_nspanel::StyleMask::empty().nonactivating_panel().into(),
+                );
+
+                // Display on fullscreen spaces
+                panel.set_collection_behavior(
+                    tauri_nspanel::CollectionBehavior::new()
+                        .can_join_all_spaces()
+                        .full_screen_auxiliary()
+                        .into(),
+                );
+
+                panel.set_level(tauri_nspanel::PanelLevel::PopUpMenu.value());
+                panel.set_hides_on_deactivate(false);
+
+                // Auto-hide when panel loses key window (click outside)
+                let handler = TunnelPanelHandler::new();
+                let app_handle_for_handler = app.handle().clone();
+                handler.window_did_resign_key(move |_notification| {
+                    tracing::debug!("Panel resigned key window — hiding");
+                    if let Ok(p) = app_handle_for_handler.get_webview_panel("main") {
+                        p.hide();
+                    }
+                });
+                panel.set_event_handler(Some(handler.as_ref()));
+
+                tracing::info!("NSPanel configured: is_floating={}, can_become_key={}",
+                    panel.is_floating_panel(), panel.can_become_key_window());
+            } else {
+                tracing::error!("Could not find 'main' webview window!");
+            }
 
             let _tray = TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -48,14 +106,40 @@ pub fn run() {
                     }
                 })
                 .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event| {
-                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        rect,
+                        ..
+                    } = event
+                    {
                         let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
+                        if let Ok(panel) = app.get_webview_panel("main") {
+                            if panel.is_visible() {
+                                panel.hide();
                             } else {
-                                let _ = window.show();
-                                let _ = window.set_focus();
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let scale = window.scale_factor().unwrap_or(1.0);
+
+                                    let icon_x = match rect.position {
+                                        tauri::Position::Physical(p) => p.x as f64,
+                                        tauri::Position::Logical(l) => l.x * scale,
+                                    };
+                                    let icon_y = match rect.position {
+                                        tauri::Position::Physical(p) => p.y as f64,
+                                        tauri::Position::Logical(l) => l.y * scale,
+                                    };
+                                    let icon_h = match rect.size {
+                                        tauri::Size::Physical(s) => s.height as f64,
+                                        tauri::Size::Logical(l) => l.height * scale,
+                                    };
+
+                                    let x = icon_x;
+                                    let y = icon_y + icon_h;
+                                    let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+                                }
+                                panel.order_front_regardless();
+                                panel.show_and_make_key();
                             }
                         }
                     }
@@ -68,7 +152,7 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             let manager_for_events = manager.clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 while let Some(event) = event_rx.recv().await {
                     let _ = app_handle.emit("tunnel-status-changed", &event);
 
@@ -100,7 +184,7 @@ pub fn run() {
             });
 
             let app_handle2 = app.handle().clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 while let Some(event) = error_rx.recv().await {
                     let _ = app_handle2.emit("tunnel-error", &event);
                 }
@@ -117,6 +201,7 @@ pub fn run() {
             commands::list_tunnels,
             commands::connect_tunnel,
             commands::disconnect_tunnel,
+            commands::store_passphrase_for_tunnel,
             commands::reload_config,
         ])
         .run(tauri::generate_context!())

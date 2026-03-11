@@ -18,10 +18,11 @@
         "height": 400,
         "resizable": false,
         "decorations": false,
-        "transparent": true,
+        "transparent": false,
         "visible": false,
         "skipTaskbar": true,
-        "alwaysOnTop": true
+        "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true
       }
     ],
     "security": {

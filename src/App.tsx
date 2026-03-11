@@ -1,14 +1,24 @@
 import { TunnelList } from "./components/TunnelList";
+import { PassphraseDialog } from "./components/PassphraseDialog";
 import { useTunnels } from "./hooks/useTunnels";
 
 function App() {
-  const { tunnels, loading, error, connect, disconnect } = useTunnels();
+  const {
+    tunnels,
+    loading,
+    error,
+    connect,
+    disconnect,
+    passphrasePrompt,
+    submitPassphrase,
+    cancelPassphrase,
+  } = useTunnels();
 
   const connectedCount = tunnels.filter((t) => t.status === "connected").length;
   const totalCount = tunnels.length;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white select-none">
+    <div className="h-screen flex flex-col bg-gray-900 text-white select-none">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
         <div>
@@ -26,8 +36,8 @@ function App() {
         </div>
       )}
 
-      {/* Content */}
-      <div className="p-2">
+      {/* Content — scrollable */}
+      <div className="flex-1 overflow-y-auto p-2">
         {loading ? (
           <div className="py-8 text-center">
             <p className="text-gray-400 text-sm">Loading...</p>
@@ -40,6 +50,15 @@ function App() {
           />
         )}
       </div>
+
+      {/* Passphrase dialog */}
+      {passphrasePrompt && (
+        <PassphraseDialog
+          tunnelId={passphrasePrompt.tunnelId}
+          onSubmit={submitPassphrase}
+          onCancel={cancelPassphrase}
+        />
+      )}
     </div>
   );
 }

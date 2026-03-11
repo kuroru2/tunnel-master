@@ -32,17 +32,26 @@ pub struct TunnelConfig {
     pub local_port: u16,
     pub remote_host: String,
     pub remote_port: u16,
+    #[serde(default)]
     pub auto_connect: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
+    #[serde(default = "default_keepalive_interval")]
     pub keepalive_interval_secs: u64,
+    #[serde(default = "default_keepalive_timeout")]
     pub keepalive_timeout_secs: u64,
+    #[serde(default = "default_connection_timeout")]
     pub connection_timeout_secs: u64,
+    #[serde(default)]
     pub launch_at_login: bool,
 }
+
+fn default_keepalive_interval() -> u64 { 15 }
+fn default_keepalive_timeout() -> u64 { 30 }
+fn default_connection_timeout() -> u64 { 10 }
 
 impl Default for Settings {
     fn default() -> Self {

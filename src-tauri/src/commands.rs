@@ -2,6 +2,7 @@ use tauri::State;
 use tokio::sync::oneshot;
 
 use crate::config::store::ConfigStore;
+use crate::keychain;
 use crate::tunnel::manager::{ManagerCommand, ManagerHandle};
 use crate::types::TunnelInfo;
 
@@ -58,6 +59,31 @@ pub async fn disconnect_tunnel(id: String, state: State<'_, AppState>) -> Result
         .await
         .map_err(|e| format!("Manager response error: {}", e))?
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn store_passphrase_for_tunnel(
+    id: String,
+    passphrase: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+    state
+        .manager
+        .send(ManagerCommand::GetKeyPath {
+            id,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|e| format!("Manager unavailable: {}", e))?;
+
+    let key_path = reply_rx
+        .await
+        .map_err(|e| format!("Manager response error: {}", e))?
+        .map_err(|e| e.to_string())?;
+
+    let expanded = ConfigStore::expand_tilde(&key_path);
+    keychain::set_passphrase(expanded.to_string_lossy().as_ref(), &passphrase)
 }
 
 #[tauri::command]

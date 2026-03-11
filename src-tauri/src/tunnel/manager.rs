@@ -30,9 +30,14 @@ pub enum ManagerCommand {
         config: AppConfig,
         reply: oneshot::Sender<Result<(), TunnelError>>,
     },
+    GetKeyPath {
+        id: String,
+        reply: oneshot::Sender<Result<String, TunnelError>>,
+    },
     TunnelDied {
         id: String,
         error: String,
+        generation: u64,
     },
 }
 
@@ -41,10 +46,12 @@ struct TunnelState {
     config: TunnelConfig,
     status: TunnelStatus,
     error_message: Option<String>,
-    /// Handle to abort the tunnel's tokio tasks on disconnect
-    abort_handle: Option<tokio::task::AbortHandle>,
+    /// Handles to abort the tunnel's background tasks on disconnect
+    abort_handles: Vec<tokio::task::AbortHandle>,
     /// Active SSH connection, if connected
     ssh_connection: Option<Arc<SshConnection>>,
+    /// Generation counter to detect stale TunnelDied messages
+    generation: u64,
 }
 
 impl TunnelState {
@@ -53,8 +60,9 @@ impl TunnelState {
             config,
             status: TunnelStatus::Disconnected,
             error_message: None,
-            abort_handle: None,
+            abort_handles: Vec::new(),
             ssh_connection: None,
+            generation: 0,
         }
     }
 
@@ -82,7 +90,7 @@ pub fn spawn_manager(
     let (tx, rx) = mpsc::channel(32);
     let manager_tx = tx.clone();
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let mut manager = TunnelManagerActor::new(config, event_tx, error_tx, manager_tx);
         manager.run(rx).await;
     });
@@ -145,8 +153,16 @@ impl TunnelManagerActor {
                     let _ = reply.send(result);
                 }
 
-                ManagerCommand::TunnelDied { id, error } => {
-                    self.handle_tunnel_died(&id, &error).await;
+                ManagerCommand::GetKeyPath { id, reply } => {
+                    let result = match self.tunnels.get(&id) {
+                        Some(t) => Ok(t.config.key_path.clone()),
+                        None => Err(TunnelError::TunnelNotFound(id)),
+                    };
+                    let _ = reply.send(result);
+                }
+
+                ManagerCommand::TunnelDied { id, error, generation } => {
+                    self.handle_tunnel_died(&id, &error, generation).await;
                 }
             }
         }
@@ -219,18 +235,26 @@ impl TunnelManagerActor {
             }
         };
 
+        // Increment generation so stale TunnelDied messages are ignored
+        let generation = {
+            let tunnel = self.tunnels.get_mut(id).unwrap();
+            tunnel.generation += 1;
+            tunnel.generation
+        };
+
         // Create death channel for health/forwarder to report tunnel death
         let (death_tx, mut death_rx) = mpsc::channel::<String>(1);
         let manager_tx = self.manager_tx.clone();
         let tunnel_id = id.to_string();
 
-        // Spawn death listener that forwards to manager
-        tokio::spawn(async move {
+        // Spawn death listener that forwards to manager with generation tag
+        let death_handle = tokio::spawn(async move {
             if let Some(error) = death_rx.recv().await {
                 let _ = manager_tx
                     .send(ManagerCommand::TunnelDied {
                         id: tunnel_id,
                         error,
+                        generation,
                     })
                     .await;
             }
@@ -260,7 +284,7 @@ impl TunnelManagerActor {
         let health_ssh = ssh.clone();
         let health_tunnel_id = id.to_string();
         let health_death_tx = death_tx;
-        tokio::spawn(async move {
+        let health_handle = tokio::spawn(async move {
             HealthMonitor::run(
                 health_ssh,
                 health_tunnel_id,
@@ -271,10 +295,16 @@ impl TunnelManagerActor {
             .await;
         });
 
-        // Store state
+        // Store state — abort all previous tasks and track new ones
         {
             let tunnel = self.tunnels.get_mut(id).unwrap();
-            tunnel.abort_handle = Some(forwarder_handle.abort_handle());
+            // Abort any leftover tasks from a previous connection
+            for handle in tunnel.abort_handles.drain(..) {
+                handle.abort();
+            }
+            tunnel.abort_handles.push(forwarder_handle.abort_handle());
+            tunnel.abort_handles.push(health_handle.abort_handle());
+            tunnel.abort_handles.push(death_handle.abort_handle());
             tunnel.ssh_connection = Some(ssh);
             tunnel.status = TunnelStatus::Connected;
         }
@@ -299,9 +329,9 @@ impl TunnelManagerActor {
         }
         self.emit_status(id, &TunnelStatus::Disconnecting);
 
-        // Abort the tunnel's background tasks and clean up SSH
+        // Abort all background tasks and clean up SSH
         if let Some(tunnel) = self.tunnels.get_mut(id) {
-            if let Some(handle) = tunnel.abort_handle.take() {
+            for handle in tunnel.abort_handles.drain(..) {
                 handle.abort();
             }
             if let Some(ssh) = tunnel.ssh_connection.take() {
@@ -316,8 +346,18 @@ impl TunnelManagerActor {
         Ok(())
     }
 
-    async fn handle_tunnel_died(&mut self, id: &str, error: &str) {
-        if !self.tunnels.contains_key(id) {
+    async fn handle_tunnel_died(&mut self, id: &str, error: &str, generation: u64) {
+        let tunnel = match self.tunnels.get(id) {
+            Some(t) => t,
+            None => return,
+        };
+
+        // Ignore stale death messages from a previous connection generation
+        if tunnel.generation != generation {
+            debug!(
+                "Ignoring stale TunnelDied for {} (gen {} != current {})",
+                id, generation, tunnel.generation
+            );
             return;
         }
 
@@ -333,7 +373,7 @@ impl TunnelManagerActor {
         // Clean up
         {
             let tunnel = self.tunnels.get_mut(id).unwrap();
-            if let Some(handle) = tunnel.abort_handle.take() {
+            for handle in tunnel.abort_handles.drain(..) {
                 handle.abort();
             }
             if let Some(ssh) = tunnel.ssh_connection.take() {
