@@ -937,6 +937,7 @@ impl TunnelManagerActor {
             tunnel.status = TunnelStatus::Error;
             tunnel.error_message = Some(error.to_string());
             self.emit_status(id, &TunnelStatus::Error);
+            self.emit_error(id, error, "connection_lost");
 
             // Clean up
             if let Some(handle) = tunnel.abort_handle.take() {
