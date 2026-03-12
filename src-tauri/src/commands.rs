@@ -210,3 +210,18 @@ pub async fn get_tunnel_config(
         .await.map_err(|e| format!("Manager unavailable: {}", e))?;
     reply_rx.await.map_err(|e| format!("Manager error: {}", e))?.map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn pick_key_file() -> Result<Option<String>, String> {
+    // NSPanel uses NonactivatingPanel — must activate the app for NSOpenPanel to show.
+    // We use rfd directly on a blocking thread since it handles activation internally.
+    let result = tokio::task::spawn_blocking(move || {
+        let dialog = rfd::FileDialog::new()
+            .set_title("Select SSH Key")
+            .set_directory(dirs::home_dir().unwrap_or_default().join(".ssh"));
+        dialog.pick_file().map(|p| p.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("Dialog error: {}", e))?;
+    Ok(result)
+}

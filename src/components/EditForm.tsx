@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { TunnelInput, TunnelConfig } from "../types";
 
 interface EditFormProps {
@@ -121,13 +122,29 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
             type="number"
           />
           <FormRow label="Username" value={form.user} onChange={(v) => updateField("user", v)} />
-          <FormRow
-            label="Key Path"
-            value={form.keyPath}
-            onChange={(v) => updateField("keyPath", v)}
-            placeholder="~/.ssh/id_rsa"
-            last
-          />
+          <div className="flex items-center px-3 py-2">
+            <label className="text-sm text-gray-400 w-24 flex-shrink-0">Key Path</label>
+            <input
+              type="text"
+              value={form.keyPath}
+              onChange={(e) => updateField("keyPath", e.target.value)}
+              placeholder="~/.ssh/id_rsa"
+              className="flex-1 bg-transparent text-sm text-white outline-none placeholder-gray-600"
+            />
+            <button
+              type="button"
+              onClick={async () => {
+                const path = await invoke<string | null>("pick_key_file");
+                if (path) updateField("keyPath", path);
+              }}
+              className="ml-2 text-blue-400 hover:text-blue-300 flex-shrink-0"
+              title="Browse for key file"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M3.75 3A1.75 1.75 0 002 4.75v3.26a3.235 3.235 0 011.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0016.25 5h-4.836a.25.25 0 01-.177-.073L9.823 3.513A1.75 1.75 0 008.586 3H3.75zM3.75 9A1.75 1.75 0 002 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0018 15.25v-4.5A1.75 1.75 0 0016.25 9H3.75z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Port Forwarding section */}

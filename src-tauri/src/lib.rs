@@ -51,6 +51,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_nspanel::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             // No dock icon, no space switching on activation
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -207,6 +208,7 @@ pub fn run() {
             commands::update_tunnel,
             commands::delete_tunnel,
             commands::get_tunnel_config,
+            commands::pick_key_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
