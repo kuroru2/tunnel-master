@@ -16,10 +16,13 @@ jobs:
         include:
           - os: macos-latest
             label: macOS
+            bundles: app,dmg
           - os: ubuntu-latest
             label: Linux
+            bundles: deb,appimage
           - os: windows-latest
             label: Windows
+            bundles: nsis,msi
 
     name: Build (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
@@ -55,7 +58,7 @@ jobs:
         run: cargo test
 
       - name: Build Tauri app
-        run: npx tauri build
+        run: npx tauri build --bundles ${{ matrix.bundles }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
