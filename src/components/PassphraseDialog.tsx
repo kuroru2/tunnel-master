@@ -21,15 +21,15 @@ export function PassphraseDialog({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <form
         onSubmit={handleSubmit}
-        className="bg-gray-800 rounded-lg p-4 mx-3 w-full border border-white/10"
+        className="bg-white dark:bg-[#1a1a1a] rounded-xl p-4 mx-3 w-full border border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.08)]"
       >
         <h3 className="text-sm font-semibold mb-1">Passphrase Required</h3>
-        <p className="text-xs text-gray-400 mb-3">
-          Enter the passphrase for <span className="text-gray-300">{tunnelId}</span>'s SSH key.
-          It will be stored in your macOS Keychain.
+        <p className="text-xs text-[#999] dark:text-[#666] mb-3">
+          Enter the passphrase for <span className="text-[#1a1a1a] dark:text-[#e5e5e5]">{tunnelId}</span>'s SSH key.
+          It will be stored securely.
         </p>
         <input
           type="password"
@@ -37,21 +37,21 @@ export function PassphraseDialog({
           onChange={(e) => setPassphrase(e.target.value)}
           placeholder="SSH key passphrase"
           autoFocus
-          className="w-full px-3 py-2 bg-gray-900 border border-white/10 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 mb-3"
+          className="w-full px-3 py-2 bg-[#fafafa] dark:bg-[#0f0f0f] border border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.06)] rounded-md text-sm placeholder-[#bbb] dark:placeholder-[#555] focus:outline-none focus:ring-1 focus:ring-[#bbb] dark:focus:ring-[#555] mb-3"
         />
         <div className="flex gap-2 justify-end">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 text-xs text-gray-400 hover:text-white rounded"
+            className="px-3 py-1.5 text-xs text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999] rounded"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+            className="px-3 py-1.5 text-xs font-medium bg-[#1a1a1a] dark:bg-[#e5e5e5] text-[#fafafa] dark:text-[#0f0f0f] rounded-md hover:opacity-90"
           >
-            Unlock & Connect
+            Unlock
           </button>
         </div>
       </form>
