@@ -68,18 +68,18 @@ function App() {
   const totalCount = tunnels.length;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 text-white select-none">
+    <div className="h-screen flex flex-col bg-[#fafafa] dark:bg-[#0f0f0f] text-[#1a1a1a] dark:text-[#e5e5e5] select-none">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.06)]">
         <div>
           <h1 className="text-sm font-semibold">Tunnel Master</h1>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-[#999] dark:text-[#666]">
             {connectedCount}/{totalCount} active
           </p>
         </div>
         <button
           onClick={() => setView({ kind: "edit-list" })}
-          className="text-sm text-blue-400 hover:text-blue-300"
+          className="text-[#999] dark:text-[#888] hover:text-[#666] dark:hover:text-[#aaa]"
           title="Edit tunnels"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -90,8 +90,8 @@ function App() {
 
       {/* Error banner */}
       {error && (
-        <div className="mx-3 mt-2 px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-md">
-          <p className="text-xs text-red-400">{error}</p>
+        <div className="mx-3 mt-2 px-3 py-2 border-l-2 border-red-500 bg-red-500/[0.04] dark:bg-red-500/[0.06] rounded-r">
+          <p className="text-xs text-[#dc2626] dark:text-[#f87171]">{error}</p>
         </div>
       )}
 
@@ -99,7 +99,7 @@ function App() {
       <div className="flex-1 overflow-y-auto p-2">
         {loading ? (
           <div className="py-8 text-center">
-            <p className="text-gray-400 text-sm">Loading...</p>
+            <p className="text-[#999] dark:text-[#666] text-sm">Loading...</p>
           </div>
         ) : (
           <TunnelList
