@@ -5,6 +5,9 @@
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --glow-green: 0 0 4px rgba(74, 222, 128, 0.4);
 }
 
 body {
