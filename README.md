@@ -33,6 +33,11 @@ Download the latest release from [Releases](../../releases):
 
 No runtime dependencies — everything is bundled in the binary.
 
+> **macOS note:** The app is not code-signed. macOS will show a warning that the app "is damaged and can't be opened." To fix this, run:
+> ```bash
+> xattr -cr /Applications/Tunnel\ Master.app
+> ```
+
 ## Development
 
 ### Prerequisites
