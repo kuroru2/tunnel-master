@@ -14,11 +14,11 @@ pub fn get_passphrase(key_path: &str) -> Option<String> {
     match get_generic_password(SERVICE_NAME, key_path) {
         Ok(bytes) => {
             let passphrase = String::from_utf8(bytes).ok()?;
-            debug!("Retrieved passphrase from Keychain for {}", key_path);
+            debug!("Retrieved passphrase from Keychain");
             Some(passphrase)
         }
         Err(e) => {
-            debug!("No passphrase in Keychain for {}: {}", key_path, e);
+            debug!("No passphrase in Keychain: {}", e);
             None
         }
     }
@@ -29,15 +29,15 @@ pub fn set_passphrase(key_path: &str, passphrase: &str) -> Result<(), String> {
     let _ = delete_generic_password(SERVICE_NAME, key_path);
     set_generic_password(SERVICE_NAME, key_path, passphrase.as_bytes())
         .map_err(|e| format!("Failed to store passphrase: {}", e))?;
-    debug!("Stored passphrase in Keychain for {}", key_path);
+    debug!("Stored passphrase in Keychain");
     Ok(())
 }
 
 // ── Linux / Windows: no keychain support yet ────────────────────────
 
 #[cfg(not(target_os = "macos"))]
-pub fn get_passphrase(key_path: &str) -> Option<String> {
-    debug!("Keychain not available on this platform for {}", key_path);
+pub fn get_passphrase(_key_path: &str) -> Option<String> {
+    debug!("Keychain not available on this platform");
     None
 }
 

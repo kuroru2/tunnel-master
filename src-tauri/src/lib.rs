@@ -230,7 +230,7 @@ pub fn run() {
 
             app.manage(AppState {
                 manager,
-                config_store,
+                config_store: std::sync::Mutex::new(config_store),
             });
 
             Ok(())

@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use tauri::State;
 use tokio::sync::oneshot;
 
@@ -8,7 +10,7 @@ use crate::types::{TunnelConfig, TunnelInfo, TunnelInput};
 
 pub struct AppState {
     pub manager: ManagerHandle,
-    pub config_store: ConfigStore,
+    pub config_store: Mutex<ConfigStore>,
 }
 
 #[tauri::command]
@@ -90,6 +92,8 @@ pub async fn store_passphrase_for_tunnel(
 pub async fn reload_config(state: State<'_, AppState>) -> Result<(), String> {
     let config = state
         .config_store
+        .lock()
+        .unwrap()
         .load()
         .map_err(|e| e.to_string())?;
 
@@ -132,9 +136,10 @@ pub async fn add_tunnel(
 
     // Save to disk
     {
-        let mut app_config = state.config_store.load().map_err(|e| e.to_string())?;
+        let store = state.config_store.lock().unwrap();
+        let mut app_config = store.load().map_err(|e| e.to_string())?;
         app_config.tunnels.push(config.clone());
-        state.config_store.save(&app_config).map_err(|e| e.to_string())?;
+        store.save(&app_config).map_err(|e| e.to_string())?;
     }
 
     // Add to manager
@@ -165,13 +170,14 @@ pub async fn update_tunnel(
 
     // Save to disk
     {
-        let mut app_config = state.config_store.load().map_err(|e| e.to_string())?;
+        let store = state.config_store.lock().unwrap();
+        let mut app_config = store.load().map_err(|e| e.to_string())?;
         if let Some(pos) = app_config.tunnels.iter().position(|t| t.id == id) {
             app_config.tunnels[pos] = config.clone();
         } else {
             return Err(format!("Tunnel '{}' not found in config", id));
         }
-        state.config_store.save(&app_config).map_err(|e| e.to_string())?;
+        store.save(&app_config).map_err(|e| e.to_string())?;
     }
 
     // Update in manager
@@ -193,9 +199,10 @@ pub async fn delete_tunnel(
     reply_rx.await.map_err(|e| format!("Manager error: {}", e))?.map_err(|e| e.to_string())?;
 
     // Remove from config on disk
-    let mut app_config = state.config_store.load().map_err(|e| e.to_string())?;
+    let store = state.config_store.lock().unwrap();
+    let mut app_config = store.load().map_err(|e| e.to_string())?;
     app_config.tunnels.retain(|t| t.id != id);
-    state.config_store.save(&app_config).map_err(|e| e.to_string())?;
+    store.save(&app_config).map_err(|e| e.to_string())?;
 
     Ok(())
 }

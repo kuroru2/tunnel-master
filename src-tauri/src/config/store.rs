@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
-use tracing::{debug, error};
+use std::path::PathBuf;
+use tracing::debug;
 
 use crate::errors::TunnelError;
 use crate::types::AppConfig;
