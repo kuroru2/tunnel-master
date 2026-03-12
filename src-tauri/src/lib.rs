@@ -81,7 +81,7 @@ fn setup_macos_panel(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
 // ── Tray icon click handler (macOS — uses NSPanel) ──────────────────
 
 #[cfg(target_os = "macos")]
-fn handle_tray_click(tray: &tauri::tray::TrayIcon) {
+fn handle_tray_click(tray: &tauri::tray::TrayIcon, rect: tauri::Rect) {
     let app = tray.app_handle();
     if let Ok(panel) = app.get_webview_panel("main") {
         if panel.is_visible() {
@@ -89,8 +89,23 @@ fn handle_tray_click(tray: &tauri::tray::TrayIcon) {
         } else {
             if let Some(window) = app.get_webview_window("main") {
                 let scale = window.scale_factor().unwrap_or(1.0);
-                // Position will be set by the tray event rect below
-                let _ = scale; // used in the actual call site
+
+                let icon_x = match rect.position {
+                    tauri::Position::Physical(p) => p.x as f64,
+                    tauri::Position::Logical(l) => l.x * scale,
+                };
+                let icon_y = match rect.position {
+                    tauri::Position::Physical(p) => p.y as f64,
+                    tauri::Position::Logical(l) => l.y * scale,
+                };
+                let icon_h = match rect.size {
+                    tauri::Size::Physical(s) => s.height as f64,
+                    tauri::Size::Logical(l) => l.height * scale,
+                };
+
+                let x = icon_x;
+                let y = icon_y + icon_h;
+                let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
             }
             panel.order_front_regardless();
             panel.show_and_make_key();
@@ -101,7 +116,7 @@ fn handle_tray_click(tray: &tauri::tray::TrayIcon) {
 // ── Tray icon click handler (Linux/Windows — uses regular window) ───
 
 #[cfg(not(target_os = "macos"))]
-fn handle_tray_click(tray: &tauri::tray::TrayIcon) {
+fn handle_tray_click(tray: &tauri::tray::TrayIcon, _rect: tauri::Rect) {
     let app = tray.app_handle();
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
@@ -160,10 +175,11 @@ pub fn run() {
                     if let tauri::tray::TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
+                        rect,
                         ..
                     } = event
                     {
-                        handle_tray_click(tray);
+                        handle_tray_click(tray, rect);
                     }
                 })
                 .build(app)?;
