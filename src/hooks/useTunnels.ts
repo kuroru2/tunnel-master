@@ -28,7 +28,7 @@ export function useTunnels() {
 
     const unlisten = listen<TunnelStatusEvent>(
       "tunnel-status-changed",
-      (_event) => {
+      () => {
         fetchTunnels();
       }
     );

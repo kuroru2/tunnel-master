@@ -17,10 +17,14 @@ use tauri::{
     Manager,
 };
 
+// ── macOS: NSPanel imports and setup ────────────────────────────────
+
+#[cfg(target_os = "macos")]
 use tauri_nspanel::ManagerExt as PanelManagerExt;
+#[cfg(target_os = "macos")]
 use tauri_nspanel::WebviewWindowExt as PanelWindowExt;
 
-// Define panel + event handler together (imports NSNotification etc. via tauri_panel! wrapper)
+#[cfg(target_os = "macos")]
 tauri_nspanel::tauri_panel! {
     panel!(TunnelPanel {
         config: {
@@ -33,6 +37,83 @@ tauri_nspanel::tauri_panel! {
         window_did_resign_key(notification: &NSNotification) -> ()
     })
 }
+
+#[cfg(target_os = "macos")]
+fn setup_macos_panel(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+    if let Some(window) = app.get_webview_window("main") {
+        let panel = window.to_panel::<TunnelPanel>()?;
+
+        panel.set_style_mask(
+            tauri_nspanel::StyleMask::empty().nonactivating_panel().into(),
+        );
+
+        panel.set_collection_behavior(
+            tauri_nspanel::CollectionBehavior::new()
+                .can_join_all_spaces()
+                .full_screen_auxiliary()
+                .into(),
+        );
+
+        panel.set_level(tauri_nspanel::PanelLevel::PopUpMenu.value());
+        panel.set_hides_on_deactivate(false);
+
+        let handler = TunnelPanelHandler::new();
+        let app_handle_for_handler = app.handle().clone();
+        handler.window_did_resign_key(move |_notification| {
+            tracing::debug!("Panel resigned key window — hiding");
+            if let Ok(p) = app_handle_for_handler.get_webview_panel("main") {
+                p.hide();
+            }
+        });
+        panel.set_event_handler(Some(handler.as_ref()));
+
+        tracing::info!("NSPanel configured: is_floating={}, can_become_key={}",
+            panel.is_floating_panel(), panel.can_become_key_window());
+    } else {
+        tracing::error!("Could not find 'main' webview window!");
+    }
+
+    Ok(())
+}
+
+// ── Tray icon click handler (macOS — uses NSPanel) ──────────────────
+
+#[cfg(target_os = "macos")]
+fn handle_tray_click(tray: &tauri::tray::TrayIcon) {
+    let app = tray.app_handle();
+    if let Ok(panel) = app.get_webview_panel("main") {
+        if panel.is_visible() {
+            panel.hide();
+        } else {
+            if let Some(window) = app.get_webview_window("main") {
+                let scale = window.scale_factor().unwrap_or(1.0);
+                // Position will be set by the tray event rect below
+                let _ = scale; // used in the actual call site
+            }
+            panel.order_front_regardless();
+            panel.show_and_make_key();
+        }
+    }
+}
+
+// ── Tray icon click handler (Linux/Windows — uses regular window) ───
+
+#[cfg(not(target_os = "macos"))]
+fn handle_tray_click(tray: &tauri::tray::TrayIcon) {
+    let app = tray.app_handle();
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+// ── Main run function ───────────────────────────────────────────────
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -49,52 +130,21 @@ pub fn run() {
         }
     });
 
-    tauri::Builder::default()
-        .plugin(tauri_nspanel::init())
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_nspanel::init());
+    }
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
-            // No dock icon, no space switching on activation
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            #[cfg(target_os = "macos")]
+            setup_macos_panel(app)?;
 
             let quit = MenuItem::with_id(app, "quit", "Quit Tunnel Master", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
-
-            // Convert the main window to an NSPanel
-            if let Some(window) = app.get_webview_window("main") {
-                let panel = window.to_panel::<TunnelPanel>()?;
-
-                // NonactivatingPanel — appears without activating the app (no space switch)
-                panel.set_style_mask(
-                    tauri_nspanel::StyleMask::empty().nonactivating_panel().into(),
-                );
-
-                // Display on fullscreen spaces
-                panel.set_collection_behavior(
-                    tauri_nspanel::CollectionBehavior::new()
-                        .can_join_all_spaces()
-                        .full_screen_auxiliary()
-                        .into(),
-                );
-
-                panel.set_level(tauri_nspanel::PanelLevel::PopUpMenu.value());
-                panel.set_hides_on_deactivate(false);
-
-                // Auto-hide when panel loses key window (click outside)
-                let handler = TunnelPanelHandler::new();
-                let app_handle_for_handler = app.handle().clone();
-                handler.window_did_resign_key(move |_notification| {
-                    tracing::debug!("Panel resigned key window — hiding");
-                    if let Ok(p) = app_handle_for_handler.get_webview_panel("main") {
-                        p.hide();
-                    }
-                });
-                panel.set_event_handler(Some(handler.as_ref()));
-
-                tracing::info!("NSPanel configured: is_floating={}, can_become_key={}",
-                    panel.is_floating_panel(), panel.can_become_key_window());
-            } else {
-                tracing::error!("Could not find 'main' webview window!");
-            }
 
             let _tray = TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -110,39 +160,10 @@ pub fn run() {
                     if let tauri::tray::TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
-                        rect,
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        if let Ok(panel) = app.get_webview_panel("main") {
-                            if panel.is_visible() {
-                                panel.hide();
-                            } else {
-                                if let Some(window) = app.get_webview_window("main") {
-                                    let scale = window.scale_factor().unwrap_or(1.0);
-
-                                    let icon_x = match rect.position {
-                                        tauri::Position::Physical(p) => p.x as f64,
-                                        tauri::Position::Logical(l) => l.x * scale,
-                                    };
-                                    let icon_y = match rect.position {
-                                        tauri::Position::Physical(p) => p.y as f64,
-                                        tauri::Position::Logical(l) => l.y * scale,
-                                    };
-                                    let icon_h = match rect.size {
-                                        tauri::Size::Physical(s) => s.height as f64,
-                                        tauri::Size::Logical(l) => l.height * scale,
-                                    };
-
-                                    let x = icon_x;
-                                    let y = icon_y + icon_h;
-                                    let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
-                                }
-                                panel.order_front_regardless();
-                                panel.show_and_make_key();
-                            }
-                        }
+                        handle_tray_click(tray);
                     }
                 })
                 .build(app)?;
