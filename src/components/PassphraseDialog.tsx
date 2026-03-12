@@ -1,13 +1,13 @@
 import { useState } from "react";
 
 interface PassphraseDialogProps {
-  tunnelId: string;
+  tunnelName: string;
   onSubmit: (passphrase: string) => void;
   onCancel: () => void;
 }
 
 export function PassphraseDialog({
-  tunnelId,
+  tunnelName,
   onSubmit,
   onCancel,
 }: PassphraseDialogProps) {
@@ -28,7 +28,7 @@ export function PassphraseDialog({
       >
         <h3 className="text-sm font-semibold mb-1">Passphrase Required</h3>
         <p className="text-xs text-[#999] dark:text-[#666] mb-3">
-          Enter the passphrase for <span className="text-[#1a1a1a] dark:text-[#e5e5e5]">{tunnelId}</span>'s SSH key.
+          Enter the passphrase for <span className="text-[#1a1a1a] dark:text-[#e5e5e5]">{tunnelName}</span>'s SSH key.
           It will be stored securely.
         </p>
         <input

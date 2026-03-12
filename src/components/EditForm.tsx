@@ -104,7 +104,7 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
       {/* Error */}
       {error && (
         <div className="mx-3 mt-2 px-3 py-2 border-l-2 border-red-500 bg-red-500/[0.04] dark:bg-red-500/[0.06] rounded-r">
-          <p className="text-xs text-[#dc2626] dark:text-[#f87171]">{error}</p>
+          <p className="text-xs text-[#dc2626] dark:text-[#f87171] max-h-16 overflow-y-auto break-words">{error}</p>
         </div>
       )}
 

@@ -131,9 +131,23 @@ fn handle_tray_click(tray: &tauri::tray::TrayIcon, _rect: tauri::Rect) {
 // ── Main run function ───────────────────────────────────────────────
 
 pub fn run() {
-    tracing_subscriber::fmt()
-        .with_env_filter("tunnel_master=debug")
-        .init();
+    #[cfg(target_os = "macos")]
+    {
+        use tracing_subscriber::prelude::*;
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::new("tunnel_master=debug"))
+            .with(tracing_oslog::OsLogger::new(
+                "com.tunnelmaster.app",
+                "default",
+            ))
+            .init();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        tracing_subscriber::fmt()
+            .with_env_filter("tunnel_master=debug")
+            .init();
+    }
 
     let config_store = ConfigStore::new(ConfigStore::default_path());
     let config = config_store.load().unwrap_or_else(|e| {
@@ -153,7 +167,6 @@ pub fn run() {
     }
 
     builder
-        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             setup_macos_panel(app)?;
@@ -245,6 +258,7 @@ pub fn run() {
             commands::update_tunnel,
             commands::delete_tunnel,
             commands::get_tunnel_config,
+            commands::accept_host_key,
             commands::pick_key_file,
         ])
         .run(tauri::generate_context!())

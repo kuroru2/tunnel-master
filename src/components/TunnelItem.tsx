@@ -40,7 +40,7 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
             :{tunnel.localPort} &rarr; {tunnel.remoteHost}:{tunnel.remotePort}
           </div>
           {tunnel.errorMessage && (
-            <div className="text-xs text-[#dc2626] dark:text-[#f87171] truncate mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>
+            <div className="text-xs text-[#dc2626] dark:text-[#f87171] mt-0.5 max-h-10 overflow-y-auto break-words" style={{ fontFamily: "var(--font-mono)" }}>
               {tunnel.errorMessage}
             </div>
           )}

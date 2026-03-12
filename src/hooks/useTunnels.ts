@@ -9,6 +9,15 @@ export function useTunnels() {
   const [error, setError] = useState<string | null>(null);
   const [passphrasePrompt, setPassphrasePrompt] = useState<{
     tunnelId: string;
+    tunnelName: string;
+  } | null>(null);
+  const [hostKeyPrompt, setHostKeyPrompt] = useState<{
+    tunnelId: string;
+    host: string;
+    port: number;
+    keyType: string;
+    fingerprint: string;
+    isChanged: boolean;
   } | null>(null);
 
   const fetchTunnels = useCallback(async () => {
@@ -45,12 +54,35 @@ export function useTunnels() {
     } catch (e) {
       const errMsg = String(e);
       if (errMsg.includes("encrypted") || errMsg.includes("passphrase")) {
-        setPassphrasePrompt({ tunnelId: id });
+        const name = tunnels.find((t) => t.id === id)?.name ?? id;
+        setPassphrasePrompt({ tunnelId: id, tunnelName: name });
+      } else if (errMsg.startsWith("UNKNOWN_HOST_KEY:")) {
+        // Format: UNKNOWN_HOST_KEY:host:port:key_type:fingerprint
+        const parts = errMsg.split(":");
+        setHostKeyPrompt({
+          tunnelId: id,
+          host: parts[1],
+          port: parseInt(parts[2]),
+          keyType: parts[3],
+          fingerprint: parts.slice(4).join(":"), // fingerprint may contain colons
+          isChanged: false,
+        });
+      } else if (errMsg.startsWith("HOST_KEY_CHANGED:")) {
+        // Extract host:port from the message
+        const match = errMsg.match(/host key for ([^:]+):(\d+)/i);
+        setHostKeyPrompt({
+          tunnelId: id,
+          host: match?.[1] ?? "unknown",
+          port: parseInt(match?.[2] ?? "22"),
+          keyType: "",
+          fingerprint: "",
+          isChanged: true,
+        });
       } else {
         setError(errMsg);
       }
     }
-  }, []);
+  }, [tunnels]);
 
   const submitPassphrase = useCallback(
     async (passphrase: string) => {
@@ -73,6 +105,23 @@ export function useTunnels() {
 
   const cancelPassphrase = useCallback(() => {
     setPassphrasePrompt(null);
+  }, []);
+
+  const acceptHostKey = useCallback(async () => {
+    if (!hostKeyPrompt) return;
+    const { tunnelId, host, port } = hostKeyPrompt;
+    setHostKeyPrompt(null);
+    try {
+      await invoke("accept_host_key", { host, port });
+      // Retry connect now that the key is in known_hosts
+      await invoke("connect_tunnel", { id: tunnelId });
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [hostKeyPrompt]);
+
+  const rejectHostKey = useCallback(() => {
+    setHostKeyPrompt(null);
   }, []);
 
   const disconnect = useCallback(async (id: string) => {
@@ -139,6 +188,9 @@ export function useTunnels() {
     passphrasePrompt,
     submitPassphrase,
     cancelPassphrase,
+    hostKeyPrompt,
+    acceptHostKey,
+    rejectHostKey,
     addTunnel,
     updateTunnel,
     deleteTunnel,

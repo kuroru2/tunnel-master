@@ -21,6 +21,20 @@ pub enum TunnelError {
     #[error("SSH error: {0}")]
     SshError(String),
 
+    #[error("UNKNOWN_HOST_KEY:{host}:{port}:{key_type}:{fingerprint}")]
+    HostKeyUnknown {
+        host: String,
+        port: u16,
+        key_type: String,
+        fingerprint: String,
+    },
+
+    #[error("HOST_KEY_CHANGED: Host key for {host}:{port} has changed! This could indicate a man-in-the-middle attack.")]
+    HostKeyChanged {
+        host: String,
+        port: u16,
+    },
+
     #[error("Tunnel not found: {0}")]
     TunnelNotFound(String),
 }

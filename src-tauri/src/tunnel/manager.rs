@@ -310,12 +310,13 @@ impl TunnelManagerActor {
                 local_port,
                 fwd_remote_host,
                 remote_port,
-                fwd_death_tx,
+                fwd_death_tx.clone(),
                 fwd_tunnel_id,
             )
             .await
             {
                 warn!("Port forwarder exited with error: {}", e);
+                let _ = fwd_death_tx.send(format!("Port forwarder failed: {}", e)).await;
             }
         });
 
@@ -479,6 +480,35 @@ impl TunnelManagerActor {
     fn handle_reload(&mut self, config: AppConfig) -> Result<(), TunnelError> {
         // Update settings
         self.settings = config.settings;
+
+        let new_ids: std::collections::HashSet<String> =
+            config.tunnels.iter().map(|tc| tc.id.clone()).collect();
+
+        // Remove tunnels that are no longer in config (disconnect first)
+        let removed_ids: Vec<String> = self
+            .tunnels
+            .keys()
+            .filter(|id| !new_ids.contains(*id))
+            .cloned()
+            .collect();
+        for id in &removed_ids {
+            if let Some(tunnel) = self.tunnels.get(id) {
+                if tunnel.status == TunnelStatus::Connected
+                    || tunnel.status == TunnelStatus::Connecting
+                {
+                    // Abort background tasks and clean up
+                    if let Some(tunnel) = self.tunnels.get_mut(id) {
+                        for handle in tunnel.abort_handles.drain(..) {
+                            handle.abort();
+                        }
+                        // Can't await disconnect here since handle_reload is sync,
+                        // but aborting tasks is sufficient for cleanup
+                    }
+                }
+            }
+            self.tunnels.remove(id);
+            info!("Removed tunnel '{}' during reload", id);
+        }
 
         // Add new tunnels, update existing ones (but don't touch connected tunnels' state)
         for tc in config.tunnels {

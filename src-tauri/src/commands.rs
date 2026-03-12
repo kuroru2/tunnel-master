@@ -5,6 +5,7 @@ use tokio::sync::oneshot;
 
 use crate::config::store::{generate_id, validate_tunnel_input, ConfigStore};
 use crate::keychain;
+use crate::tunnel::connection::accept_pending_host_key;
 use crate::tunnel::manager::{ManagerCommand, ManagerHandle};
 use crate::types::{TunnelConfig, TunnelInfo, TunnelInput};
 
@@ -216,6 +217,11 @@ pub async fn get_tunnel_config(
     state.manager.send(ManagerCommand::GetTunnelConfig { id, reply: reply_tx })
         .await.map_err(|e| format!("Manager unavailable: {}", e))?;
     reply_rx.await.map_err(|e| format!("Manager error: {}", e))?.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn accept_host_key(host: String, port: u16) -> Result<(), String> {
+    accept_pending_host_key(&host, port).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

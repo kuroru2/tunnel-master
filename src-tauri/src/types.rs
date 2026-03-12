@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum TunnelType {
     Local,
+    #[allow(dead_code)]
     Reverse,
+    #[allow(dead_code)]
     Dynamic,
 }
 

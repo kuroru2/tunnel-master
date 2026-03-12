@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { TunnelList } from "./components/TunnelList";
 import { PassphraseDialog } from "./components/PassphraseDialog";
+import { HostKeyDialog } from "./components/HostKeyDialog";
 import { EditList } from "./components/EditList";
 import { EditForm } from "./components/EditForm";
 import { useTunnels } from "./hooks/useTunnels";
@@ -21,6 +22,9 @@ function App() {
     passphrasePrompt,
     submitPassphrase,
     cancelPassphrase,
+    hostKeyPrompt,
+    acceptHostKey,
+    rejectHostKey,
     addTunnel,
     updateTunnel,
     deleteTunnel,
@@ -91,7 +95,7 @@ function App() {
       {/* Error banner */}
       {error && (
         <div className="mx-3 mt-2 px-3 py-2 border-l-2 border-red-500 bg-red-500/[0.04] dark:bg-red-500/[0.06] rounded-r">
-          <p className="text-xs text-[#dc2626] dark:text-[#f87171]">{error}</p>
+          <p className="text-xs text-[#dc2626] dark:text-[#f87171] max-h-16 overflow-y-auto break-words">{error}</p>
         </div>
       )}
 
@@ -113,9 +117,22 @@ function App() {
       {/* Passphrase dialog */}
       {passphrasePrompt && (
         <PassphraseDialog
-          tunnelId={passphrasePrompt.tunnelId}
+          tunnelName={passphrasePrompt.tunnelName}
           onSubmit={submitPassphrase}
           onCancel={cancelPassphrase}
+        />
+      )}
+
+      {/* Host key verification dialog */}
+      {hostKeyPrompt && (
+        <HostKeyDialog
+          host={hostKeyPrompt.host}
+          port={hostKeyPrompt.port}
+          keyType={hostKeyPrompt.keyType}
+          fingerprint={hostKeyPrompt.fingerprint}
+          isChanged={hostKeyPrompt.isChanged}
+          onAccept={acceptHostKey}
+          onReject={rejectHostKey}
         />
       )}
     </div>

@@ -26,12 +26,18 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5"
 thiserror = "2"
 async-trait = "0.1"
-tauri-plugin-dialog = "2.6.0"
 rfd = "0.17.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "2"
+keyring = { version = "3", features = ["apple-native"] }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
+tracing-oslog = "0.3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
 [dev-dependencies]
 tempfile = "3"

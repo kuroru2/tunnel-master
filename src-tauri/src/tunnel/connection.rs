@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -5,18 +6,55 @@ use async_trait::async_trait;
 use russh::client;
 use russh::*;
 use russh_keys::key;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::config::store::ConfigStore;
 use crate::errors::TunnelError;
+
+// ── Pending host key storage ─────────────────────────────────────────
+
+/// Module-level storage for host keys awaiting user acceptance (TOFU).
+/// Keyed by "host:port".
+static PENDING_HOST_KEYS: std::sync::LazyLock<std::sync::Mutex<HashMap<String, key::PublicKey>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
+/// Accept a previously-rejected unknown host key and save it to known_hosts.
+pub fn accept_pending_host_key(host: &str, port: u16) -> Result<(), TunnelError> {
+    let map_key = format!("{}:{}", host, port);
+    let pubkey = PENDING_HOST_KEYS
+        .lock()
+        .unwrap()
+        .remove(&map_key)
+        .ok_or_else(|| {
+            TunnelError::SshError(format!("No pending host key for {}:{}", host, port))
+        })?;
+
+    russh_keys::known_hosts::learn_known_hosts(host, port, &pubkey)
+        .map_err(|e| TunnelError::SshError(format!("Failed to save host key: {}", e)))?;
+
+    info!("Saved host key for {}:{} to known_hosts", host, port);
+    Ok(())
+}
+
+// ── Host key check result ────────────────────────────────────────────
+
+enum HostKeyCheckResult {
+    Unknown(key::PublicKey),
+    Changed,
+}
+
+// ── SSH client handler ───────────────────────────────────────────────
 
 /// Wrapper around russh client session
 pub struct SshConnection {
     session: client::Handle<SshClientHandler>,
 }
 
-/// Handler for russh client callbacks
-struct SshClientHandler;
+struct SshClientHandler {
+    host: String,
+    port: u16,
+    check_result: Arc<std::sync::Mutex<Option<HostKeyCheckResult>>>,
+}
 
 #[async_trait]
 impl client::Handler for SshClientHandler {
@@ -24,11 +62,45 @@ impl client::Handler for SshClientHandler {
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &key::PublicKey,
+        server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        // TODO: In production, verify against known_hosts.
-        // For POC, accept all keys.
-        Ok(true)
+        match russh_keys::known_hosts::check_known_hosts(
+            &self.host,
+            self.port,
+            server_public_key,
+        ) {
+            Ok(true) => {
+                debug!("Host key verified for {}:{}", self.host, self.port);
+                Ok(true)
+            }
+            Ok(false) => {
+                // Unknown host — store key for potential TOFU acceptance
+                info!(
+                    "Unknown host key for {}:{} ({})",
+                    self.host,
+                    self.port,
+                    server_public_key.name()
+                );
+                *self.check_result.lock().unwrap() =
+                    Some(HostKeyCheckResult::Unknown(server_public_key.clone()));
+                Ok(false)
+            }
+            Err(russh_keys::Error::KeyChanged { line }) => {
+                warn!(
+                    "HOST KEY CHANGED for {}:{} at known_hosts line {}!",
+                    self.host, self.port, line
+                );
+                *self.check_result.lock().unwrap() = Some(HostKeyCheckResult::Changed);
+                Ok(false)
+            }
+            Err(e) => {
+                warn!("Known hosts check error for {}:{}: {}", self.host, self.port, e);
+                // Fail safe — treat as unknown
+                *self.check_result.lock().unwrap() =
+                    Some(HostKeyCheckResult::Unknown(server_public_key.clone()));
+                Ok(false)
+            }
+        }
     }
 }
 
@@ -51,22 +123,66 @@ impl SshConnection {
             .map_err(|e| TunnelError::AuthFailed(format!("Failed to load key: {}", e)))?;
 
         // Configure the SSH client
-        // Use russh's built-in keepalive mechanism
+        // Enable russh's built-in keepalive (sends keepalive@openssh.com global request).
+        // HealthMonitor checks is_closed() to detect when the connection drops.
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(timeout_secs * 3)),
-            keepalive_interval: None, // We handle keepalive ourselves via HealthMonitor
+            keepalive_interval: Some(Duration::from_secs(15)),
+            keepalive_max: 3,
             ..Default::default()
+        };
+
+        let check_result = Arc::new(std::sync::Mutex::new(None));
+        let handler = SshClientHandler {
+            host: host.to_string(),
+            port,
+            check_result: check_result.clone(),
         };
 
         // Connect with timeout
         let addr = format!("{}:{}", host, port);
-        let mut session = tokio::time::timeout(
+        let mut session = match tokio::time::timeout(
             Duration::from_secs(timeout_secs),
-            client::connect(Arc::new(config), &addr, SshClientHandler),
+            client::connect(Arc::new(config), &addr, handler),
         )
         .await
-        .map_err(|_| TunnelError::ConnectionTimeout)?
-        .map_err(|e| TunnelError::SshError(format!("Connection failed: {}", e)))?;
+        {
+            Ok(Ok(session)) => session,
+            Ok(Err(e)) => {
+                // Check if this was a host key rejection
+                if let Some(result) = check_result.lock().unwrap().take() {
+                    match result {
+                        HostKeyCheckResult::Unknown(pubkey) => {
+                            let fingerprint = pubkey.fingerprint();
+                            let key_type = pubkey.name().to_string();
+                            // Store for later acceptance
+                            let map_key = format!("{}:{}", host, port);
+                            PENDING_HOST_KEYS
+                                .lock()
+                                .unwrap()
+                                .insert(map_key, pubkey);
+                            return Err(TunnelError::HostKeyUnknown {
+                                host: host.to_string(),
+                                port,
+                                key_type,
+                                fingerprint,
+                            });
+                        }
+                        HostKeyCheckResult::Changed => {
+                            return Err(TunnelError::HostKeyChanged {
+                                host: host.to_string(),
+                                port,
+                            });
+                        }
+                    }
+                }
+                return Err(TunnelError::SshError(format!(
+                    "Connection failed: {}",
+                    e
+                )));
+            }
+            Err(_) => return Err(TunnelError::ConnectionTimeout),
+        };
 
         // Authenticate
         let auth_result = session
@@ -111,27 +227,10 @@ impl SshConnection {
     }
 
     /// Check if the SSH connection is still alive.
-    /// Uses a lightweight probe: attempts to open and immediately close a session channel.
-    /// This verifies the SSH session is responsive end-to-end.
-    pub async fn send_keepalive(&self) -> Result<(), TunnelError> {
-        // Check if the underlying sender is closed first (cheap check)
-        if self.session.is_closed() {
-            return Err(TunnelError::SshError(
-                "SSH session is closed".to_string(),
-            ));
-        }
-
-        // Try to open a session channel as a health probe
-        let channel = self
-            .session
-            .channel_open_session()
-            .await
-            .map_err(|e| TunnelError::SshError(format!("Keepalive failed: {}", e)))?;
-
-        // Close the probe channel immediately
-        let _ = channel.close().await;
-
-        Ok(())
+    /// Relies on russh's built-in keepalive (keepalive@openssh.com global request)
+    /// to detect dead connections. We just check the sender state.
+    pub fn is_alive(&self) -> bool {
+        !self.session.is_closed()
     }
 
     /// Disconnect the SSH session.

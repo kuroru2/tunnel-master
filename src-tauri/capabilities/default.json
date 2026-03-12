@@ -14,7 +14,6 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "core:window:allow-set-position",
-    "core:window:allow-is-focused",
-    "dialog:default"
+    "core:window:allow-is-focused"
   ]
 }
