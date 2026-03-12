@@ -136,8 +136,12 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
             <button
               type="button"
               onClick={async () => {
-                const path = await invoke<string | null>("pick_key_file");
-                if (path) updateField("keyPath", path);
+                try {
+                  const path = await invoke<string | null>("pick_key_file");
+                  if (path) updateField("keyPath", path);
+                } catch (e) {
+                  setError(String(e));
+                }
               }}
               className="ml-2 text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999] flex-shrink-0"
               title="Browse for key file"
@@ -173,7 +177,6 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
             onChange={(v) => updateField("remotePort", parseInt(v) || 0)}
             type="number"
             placeholder="e.g. 5432"
-            last
             mono
           />
         </div>
@@ -218,17 +221,12 @@ interface FormRowProps {
   onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
-  last?: boolean;
   mono?: boolean;
 }
 
-function FormRow({ label, value, onChange, type = "text", placeholder, last, mono }: FormRowProps) {
+function FormRow({ label, value, onChange, type = "text", placeholder, mono }: FormRowProps) {
   return (
-    <div
-      className={`flex items-center px-3 py-2 ${
-        last ? "" : "border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]"
-      }`}
-    >
+    <div className="flex items-center px-3 py-2 border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)] last:border-b-0">
       <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">{label}</label>
       <input
         type={type}

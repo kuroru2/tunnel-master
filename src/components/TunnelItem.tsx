@@ -47,23 +47,30 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
         </div>
       </div>
 
-      {isBusy ? (
-        <span className="shrink-0 ml-3 text-xs text-[#fbbf24]">
-          {tunnel.status === "connecting" ? "connecting" : "disconnecting"}
-        </span>
-      ) : (
-        <button
-          onClick={handleToggle}
-          className="shrink-0 ml-3 p-1 cursor-pointer"
-          title={isConnected ? "Disconnect" : "Connect"}
-        >
-          <div
-            className={`w-2 h-2 rounded-full ${
-              isConnected ? "bg-[#f87171]" : "bg-[#4ade80]"
-            }`}
-          />
-        </button>
-      )}
+      <button
+        onClick={handleToggle}
+        disabled={isBusy}
+        className={`shrink-0 ml-3 w-7 h-4 rounded-full relative transition-colors ${
+          isBusy ? "cursor-not-allowed" : "cursor-pointer"
+        } ${
+          isConnected || tunnel.status === "disconnecting"
+            ? "bg-[#4ade80]"
+            : tunnel.status === "connecting"
+            ? "bg-[#fbbf24]"
+            : "bg-[#ccc] dark:bg-[#333]"
+        }`}
+        title={isConnected ? "Disconnect" : "Connect"}
+      >
+        <div
+          className={`w-3 h-3 rounded-full absolute top-[2px] transition-transform ${
+            isConnected || tunnel.status === "disconnecting"
+              ? "translate-x-[14px] bg-white"
+              : tunnel.status === "connecting"
+              ? "translate-x-[14px] bg-white animate-pulse"
+              : "translate-x-[2px] bg-white dark:bg-[#888]"
+          }`}
+        />
+      </button>
     </div>
   );
 }

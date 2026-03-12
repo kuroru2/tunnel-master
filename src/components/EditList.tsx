@@ -47,7 +47,7 @@ export function EditList({ tunnels, onEdit, onAdd, onDelete, onDone }: EditListP
       </div>
 
       {/* Tunnel list */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
         {tunnels.length === 0 ? (
           <div className="py-8 text-center">
             <p className="text-[#999] dark:text-[#666] text-sm">No tunnels configured</p>
@@ -61,7 +61,7 @@ export function EditList({ tunnels, onEdit, onAdd, onDelete, onDone }: EditListP
         ) : (
           <div className="space-y-0.5">
             {tunnels.map((tunnel) => (
-              <div key={tunnel.id} className="flex items-center rounded-lg hover:bg-[rgba(0,0,0,0.03)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors">
+              <div key={tunnel.id} className="flex items-center rounded-lg hover:bg-[rgba(0,0,0,0.03)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors min-w-0">
                 {/* Delete minus button */}
                 <button
                   onClick={() => handleMinusClick(tunnel.id)}
@@ -76,7 +76,7 @@ export function EditList({ tunnels, onEdit, onAdd, onDelete, onDone }: EditListP
                 {/* Tunnel info — clickable to edit */}
                 <button
                   onClick={() => onEdit(tunnel.id)}
-                  className="flex-1 flex items-center justify-between px-2 py-2.5 text-left"
+                  className="flex-1 flex items-center justify-between px-2 py-2.5 text-left min-w-0 overflow-hidden"
                 >
                   <div className="min-w-0">
                     <p className="text-sm truncate">{tunnel.name}</p>

@@ -21,12 +21,6 @@ export interface TunnelStatusEvent {
   timestamp: number;
 }
 
-export interface TunnelErrorEvent {
-  id: string;
-  message: string;
-  code: string;
-}
-
 export interface TunnelInput {
   name: string;
   host: string;
