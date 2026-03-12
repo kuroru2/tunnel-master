@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { TunnelInput, TunnelConfig } from "../types";
 
 interface EditFormProps {
-  tunnelId: string | null; // null = new tunnel
+  tunnelId: string | null;
   getTunnelConfig: (id: string) => Promise<TunnelConfig>;
   onSave: (input: TunnelInput, id: string | null) => Promise<void>;
   onBack: () => void;
@@ -73,19 +73,19 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-900">
-        <p className="text-gray-400 text-sm">Loading...</p>
+      <div className="h-screen flex items-center justify-center bg-[#fafafa] dark:bg-[#0f0f0f]">
+        <p className="text-[#999] dark:text-[#666] text-sm">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 text-white select-none">
+    <div className="h-screen flex flex-col bg-[#fafafa] dark:bg-[#0f0f0f] text-[#1a1a1a] dark:text-[#e5e5e5] select-none">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.06)]">
         <button
           onClick={onBack}
-          className="text-sm text-blue-400 hover:text-blue-300"
+          className="text-sm text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999]"
         >
           &lsaquo; Back
         </button>
@@ -95,7 +95,7 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
         <button
           onClick={handleSave}
           disabled={!isValid || saving}
-          className="text-sm font-semibold text-blue-400 hover:text-blue-300 disabled:text-gray-600 disabled:cursor-not-allowed"
+          className="text-sm font-semibold disabled:text-[#bbb] dark:disabled:text-[#555] disabled:cursor-not-allowed hover:opacity-80"
         >
           {saving ? "..." : "Save"}
         </button>
@@ -103,8 +103,8 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
 
       {/* Error */}
       {error && (
-        <div className="mx-3 mt-2 px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-md">
-          <p className="text-xs text-red-400">{error}</p>
+        <div className="mx-3 mt-2 px-3 py-2 border-l-2 border-red-500 bg-red-500/[0.04] dark:bg-red-500/[0.06] rounded-r">
+          <p className="text-xs text-[#dc2626] dark:text-[#f87171]">{error}</p>
         </div>
       )}
 
@@ -112,7 +112,7 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {/* Connection section */}
         <SectionLabel>Connection</SectionLabel>
-        <div className="bg-white/5 rounded-lg overflow-hidden mb-4">
+        <div className="bg-[rgba(0,0,0,0.03)] dark:bg-[rgba(255,255,255,0.04)] rounded-lg overflow-hidden mb-4 border border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]">
           <FormRow label="Name" value={form.name} onChange={(v) => updateField("name", v)} />
           <FormRow label="Host" value={form.host} onChange={(v) => updateField("host", v)} />
           <FormRow
@@ -120,16 +120,18 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
             value={String(form.port)}
             onChange={(v) => updateField("port", parseInt(v) || 0)}
             type="number"
+            mono
           />
           <FormRow label="Username" value={form.user} onChange={(v) => updateField("user", v)} />
           <div className="flex items-center px-3 py-2">
-            <label className="text-sm text-gray-400 w-24 flex-shrink-0">Key Path</label>
+            <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">Key</label>
             <input
               type="text"
               value={form.keyPath}
               onChange={(e) => updateField("keyPath", e.target.value)}
               placeholder="~/.ssh/id_rsa"
-              className="flex-1 bg-transparent text-sm text-white outline-none placeholder-gray-600"
+              className="flex-1 bg-transparent text-sm outline-none placeholder-[#bbb] dark:placeholder-[#555]"
+              style={{ fontFamily: "var(--font-mono)" }}
             />
             <button
               type="button"
@@ -137,7 +139,7 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
                 const path = await invoke<string | null>("pick_key_file");
                 if (path) updateField("keyPath", path);
               }}
-              className="ml-2 text-blue-400 hover:text-blue-300 flex-shrink-0"
+              className="ml-2 text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999] flex-shrink-0"
               title="Browse for key file"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -149,44 +151,49 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
 
         {/* Port Forwarding section */}
         <SectionLabel>Port Forwarding</SectionLabel>
-        <div className="bg-white/5 rounded-lg overflow-hidden mb-4">
+        <div className="bg-[rgba(0,0,0,0.03)] dark:bg-[rgba(255,255,255,0.04)] rounded-lg overflow-hidden mb-4 border border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]">
           <FormRow
-            label="Local Port"
+            label="Local"
             value={form.localPort === 0 ? "" : String(form.localPort)}
             onChange={(v) => updateField("localPort", parseInt(v) || 0)}
             type="number"
             placeholder="e.g. 5432"
+            mono
           />
           <FormRow
-            label="Remote Host"
+            label="Remote"
             value={form.remoteHost}
             onChange={(v) => updateField("remoteHost", v)}
             placeholder="e.g. localhost"
+            mono
           />
           <FormRow
-            label="Remote Port"
+            label="Port"
             value={form.remotePort === 0 ? "" : String(form.remotePort)}
             onChange={(v) => updateField("remotePort", parseInt(v) || 0)}
             type="number"
             placeholder="e.g. 5432"
             last
+            mono
           />
         </div>
 
         {/* Options section */}
         <SectionLabel>Options</SectionLabel>
-        <div className="bg-white/5 rounded-lg overflow-hidden">
+        <div className="bg-[rgba(0,0,0,0.03)] dark:bg-[rgba(255,255,255,0.04)] rounded-lg overflow-hidden border border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]">
           <div className="flex items-center justify-between px-3 py-2.5">
-            <span className="text-sm text-gray-300">Auto Connect</span>
+            <span className="text-sm text-[#999] dark:text-[#999]">Auto Connect</span>
             <button
               onClick={() => updateField("autoConnect", !form.autoConnect)}
-              className={`w-10 h-6 rounded-full relative transition-colors ${
-                form.autoConnect ? "bg-green-500" : "bg-gray-600"
+              className={`w-8 h-[18px] rounded-full relative transition-colors ${
+                form.autoConnect ? "bg-[#4ade80]" : "bg-[#ccc] dark:bg-[#333]"
               }`}
             >
               <div
-                className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${
-                  form.autoConnect ? "translate-x-[18px]" : "translate-x-0.5"
+                className={`w-[14px] h-[14px] rounded-full absolute top-[2px] transition-transform ${
+                  form.autoConnect
+                    ? "translate-x-[14px] bg-white"
+                    : "translate-x-[2px] bg-white dark:bg-[#888]"
                 }`}
               />
             </button>
@@ -199,7 +206,7 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 px-1">
+    <p className="text-xs text-[#bbb] dark:text-[#555] uppercase tracking-wider mb-1.5 px-1">
       {children}
     </p>
   );
@@ -212,22 +219,24 @@ interface FormRowProps {
   type?: string;
   placeholder?: string;
   last?: boolean;
+  mono?: boolean;
 }
 
-function FormRow({ label, value, onChange, type = "text", placeholder, last }: FormRowProps) {
+function FormRow({ label, value, onChange, type = "text", placeholder, last, mono }: FormRowProps) {
   return (
     <div
       className={`flex items-center px-3 py-2 ${
-        last ? "" : "border-b border-white/5"
+        last ? "" : "border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]"
       }`}
     >
-      <label className="text-sm text-gray-400 w-24 flex-shrink-0">{label}</label>
+      <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">{label}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="flex-1 bg-transparent text-sm text-white outline-none placeholder-gray-600"
+        className="flex-1 bg-transparent text-sm outline-none placeholder-[#bbb] dark:placeholder-[#555]"
+        style={mono ? { fontFamily: "var(--font-mono)" } : undefined}
       />
     </div>
   );
