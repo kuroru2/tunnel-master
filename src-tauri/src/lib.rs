@@ -128,6 +128,23 @@ fn handle_tray_click(tray: &tauri::tray::TrayIcon, _rect: tauri::Rect) {
     }
 }
 
+// ── Shutdown signal handling ─────────────────────────────────────────
+
+#[cfg(unix)]
+async fn wait_for_shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to register SIGTERM");
+    tokio::select! {
+        _ = sigterm.recv() => {}
+        _ = tokio::signal::ctrl_c() => {}
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
+}
+
 // ── Main run function ───────────────────────────────────────────────
 
 pub fn run() {
@@ -241,6 +258,29 @@ pub fn run() {
                 }
             });
 
+            // Graceful shutdown on signals: send Shutdown command to manager,
+            // wait for all tunnels to disconnect, then exit.
+            let shutdown_manager = manager.clone();
+            let shutdown_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                wait_for_shutdown_signal().await;
+                tracing::info!("Shutdown signal received, disconnecting tunnels");
+
+                let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+                if shutdown_manager
+                    .send(ManagerCommand::Shutdown { reply: reply_tx })
+                    .await
+                    .is_ok()
+                {
+                    // Wait for manager to finish disconnecting (with timeout)
+                    let _ = tokio::time::timeout(
+                        std::time::Duration::from_secs(5),
+                        reply_rx,
+                    ).await;
+                }
+                shutdown_app.exit(0);
+            });
+
             app.manage(AppState {
                 manager,
                 config_store: std::sync::Mutex::new(config_store),
@@ -258,6 +298,7 @@ pub fn run() {
             commands::update_tunnel,
             commands::delete_tunnel,
             commands::get_tunnel_config,
+            commands::quit_app,
             commands::accept_host_key,
             commands::pick_key_file,
         ])

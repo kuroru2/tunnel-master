@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { TunnelList } from "./components/TunnelList";
 import { PassphraseDialog } from "./components/PassphraseDialog";
 import { HostKeyDialog } from "./components/HostKeyDialog";
@@ -112,6 +113,16 @@ function App() {
             onDisconnect={disconnect}
           />
         )}
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.06)] px-4 py-2">
+        <button
+          onClick={() => invoke("quit_app")}
+          className="text-xs text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999]"
+        >
+          Quit Tunnel Master
+        </button>
       </div>
 
       {/* Passphrase dialog */}

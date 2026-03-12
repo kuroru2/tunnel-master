@@ -220,6 +220,18 @@ pub async fn get_tunnel_config(
 }
 
 #[tauri::command]
+pub async fn quit_app(state: State<'_, AppState>) -> Result<(), String> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+    let _ = state
+        .manager
+        .send(ManagerCommand::Shutdown { reply: reply_tx })
+        .await;
+    // Wait for tunnels to disconnect (with timeout)
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), reply_rx).await;
+    std::process::exit(0);
+}
+
+#[tauri::command]
 pub async fn accept_host_key(host: String, port: u16) -> Result<(), String> {
     accept_pending_host_key(&host, port).map_err(|e| e.to_string())
 }

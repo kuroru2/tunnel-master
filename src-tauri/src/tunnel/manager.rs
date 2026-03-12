@@ -55,6 +55,9 @@ pub enum ManagerCommand {
         id: String,
         reply: oneshot::Sender<Result<TunnelConfig, TunnelError>>,
     },
+    Shutdown {
+        reply: oneshot::Sender<()>,
+    },
 }
 
 /// Runtime state for a single tunnel
@@ -202,6 +205,13 @@ impl TunnelManagerActor {
                         None => Err(TunnelError::TunnelNotFound(id)),
                     };
                     let _ = reply.send(result);
+                }
+
+                ManagerCommand::Shutdown { reply } => {
+                    info!("TunnelManager received shutdown command");
+                    self.disconnect_all().await;
+                    let _ = reply.send(());
+                    return; // Exit the run loop
                 }
             }
         }
