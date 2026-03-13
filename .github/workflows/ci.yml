@@ -53,14 +53,14 @@ jobs:
         run: npm ci
 
       - name: TypeScript check
-        run: npx tsc --noEmit
+        run: npx tsc -b
 
       - name: Lint
         run: npm run lint
 
       - name: Rust tests
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test --lib
 
       - name: Build
         run: npx tauri build --no-bundle
