@@ -19,6 +19,16 @@ export function useTunnels() {
     fingerprint: string;
     isChanged: boolean;
   } | null>(null);
+  const [passwordPrompt, setPasswordPrompt] = useState<{
+    tunnelId: string;
+    tunnelName: string;
+  } | null>(null);
+  const [kiPrompt, setKiPrompt] = useState<{
+    tunnelId: string;
+    name: string;
+    instructions: string;
+    prompts: Array<{ text: string; echo: boolean }>;
+  } | null>(null);
 
   const fetchTunnels = useCallback(async () => {
     try {
@@ -42,8 +52,18 @@ export function useTunnels() {
       }
     );
 
+    const unlistenKi = listen<{
+      tunnelId: string;
+      name: string;
+      instructions: string;
+      prompts: Array<{ text: string; echo: boolean }>;
+    }>("keyboard-interactive-prompt", (event) => {
+      setKiPrompt(event.payload);
+    });
+
     return () => {
       unlisten.then((fn) => fn());
+      unlistenKi.then((fn) => fn());
     };
   }, [fetchTunnels]);
 
@@ -78,6 +98,10 @@ export function useTunnels() {
           fingerprint: "",
           isChanged: true,
         });
+      } else if (errMsg.startsWith("PASSWORD_REQUIRED:")) {
+        const tunnelId = errMsg.substring("PASSWORD_REQUIRED:".length);
+        const name = tunnels.find((t) => t.id === tunnelId)?.name ?? tunnelId;
+        setPasswordPrompt({ tunnelId, tunnelName: name });
       } else {
         setError(errMsg);
       }
@@ -107,6 +131,25 @@ export function useTunnels() {
     setPassphrasePrompt(null);
   }, []);
 
+  const submitPassword = useCallback(
+    async (password: string) => {
+      if (!passwordPrompt) return;
+      const { tunnelId } = passwordPrompt;
+      setPasswordPrompt(null);
+      try {
+        await invoke("store_password_for_tunnel", { id: tunnelId, password });
+        await invoke("connect_tunnel", { id: tunnelId });
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [passwordPrompt]
+  );
+
+  const cancelPassword = useCallback(() => {
+    setPasswordPrompt(null);
+  }, []);
+
   const acceptHostKey = useCallback(async () => {
     if (!hostKeyPrompt) return;
     const { tunnelId, host, port } = hostKeyPrompt;
@@ -123,6 +166,31 @@ export function useTunnels() {
   const rejectHostKey = useCallback(() => {
     setHostKeyPrompt(null);
   }, []);
+
+  const respondKeyboardInteractive = useCallback(
+    async (responses: string[]) => {
+      if (!kiPrompt) return;
+      const { tunnelId } = kiPrompt;
+      setKiPrompt(null);
+      try {
+        await invoke("respond_keyboard_interactive", { id: tunnelId, responses });
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [kiPrompt]
+  );
+
+  const cancelKeyboardInteractive = useCallback(async () => {
+    if (!kiPrompt) return;
+    const { tunnelId } = kiPrompt;
+    setKiPrompt(null);
+    try {
+      await invoke("cancel_keyboard_interactive", { id: tunnelId });
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [kiPrompt]);
 
   const disconnect = useCallback(async (id: string) => {
     try {
@@ -191,6 +259,12 @@ export function useTunnels() {
     hostKeyPrompt,
     acceptHostKey,
     rejectHostKey,
+    passwordPrompt,
+    submitPassword,
+    cancelPassword,
+    kiPrompt,
+    respondKeyboardInteractive,
+    cancelKeyboardInteractive,
     addTunnel,
     updateTunnel,
     deleteTunnel,
