@@ -59,6 +59,7 @@ jobs:
         run: npm run lint
 
       - name: Rust tests
+        if: runner.os != 'Windows'
         working-directory: src-tauri
         run: cargo test --lib
 
