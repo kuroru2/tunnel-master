@@ -21,8 +21,8 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
   // -- Toggle feedback state --
   const prevStatusRef = useRef<TunnelStatus>(tunnel.status);
   const connectStartRef = useRef<number>(0);
-  const failTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const minVisTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const failTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const minVisTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [recentlyFailed, setRecentlyFailed] = useState(false);
   const [showConnecting, setShowConnecting] = useState(false);
 
