@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TunnelInput, TunnelConfig, TunnelInfo, AuthMethod } from "../types";
+import { CustomSelect } from "./CustomSelect";
 
 interface EditFormProps {
   tunnelId: string | null;
@@ -176,13 +177,11 @@ export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }:
           {/* Jump Host */}
           <div className="flex items-center px-3 py-2 border-t border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]">
             <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">Jump</label>
-            <select value={form.jumpHost ?? ""} onChange={(e) => updateField("jumpHost", e.target.value || null)}
-              className="flex-1 bg-transparent text-sm outline-none text-[#1a1a1a] dark:text-[#e5e5e5]">
-              <option value="">None</option>
-              {tunnels.filter((t) => t.id !== tunnelId).map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
+            <CustomSelect
+              value={form.jumpHost}
+              onChange={(v) => updateField("jumpHost", v)}
+              options={tunnels.filter((t) => t.id !== tunnelId).map((t) => ({ value: t.id, label: t.name }))}
+            />
           </div>
         </div>
 
