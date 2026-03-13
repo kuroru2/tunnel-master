@@ -263,12 +263,15 @@ impl TunnelManagerActor {
         );
 
         // Attempt SSH connection
+        let credentials = crate::tunnel::connection::AuthCredentials::Key {
+            key_path: key_path.clone(),
+            passphrase: passphrase.clone(),
+        };
         let ssh = match SshConnection::connect(
             &host,
             port,
             &user,
-            &key_path,
-            passphrase.as_deref(),
+            credentials,
             timeout_secs,
         )
         .await

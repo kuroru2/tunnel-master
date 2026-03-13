@@ -6,10 +6,45 @@ use async_trait::async_trait;
 use russh::client;
 use russh::*;
 use russh_keys::key;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::{debug, info, warn};
 
 use crate::config::store::ConfigStore;
 use crate::errors::TunnelError;
+
+/// Slot for keyboard-interactive response synchronization.
+pub type KiResponseSlot = Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Sender<Vec<String>>>>>;
+
+/// Authentication credentials for SSH connections.
+pub enum AuthCredentials {
+    Key {
+        key_path: String,
+        passphrase: Option<String>,
+    },
+    Password(String),
+    Agent,
+    KeyboardInteractive {
+        ki_slot: KiResponseSlot,
+        app_handle: tauri::AppHandle,
+        tunnel_id: String,
+    },
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyboardInteractivePrompt {
+    pub tunnel_id: String,
+    pub name: String,
+    pub instructions: String,
+    pub prompts: Vec<KiPromptEntry>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KiPromptEntry {
+    pub text: String,
+    pub echo: bool,
+}
 
 // ── Pending host key storage ─────────────────────────────────────────
 
@@ -54,6 +89,9 @@ struct SshClientHandler {
     host: String,
     port: u16,
     check_result: Arc<std::sync::Mutex<Option<HostKeyCheckResult>>>,
+    ki_slot: KiResponseSlot,
+    app_handle: Option<tauri::AppHandle>,
+    tunnel_id: String,
 }
 
 #[async_trait]
@@ -102,29 +140,35 @@ impl client::Handler for SshClientHandler {
             }
         }
     }
+
 }
 
 impl SshConnection {
-    /// Connect to an SSH server and authenticate with a key file.
+    /// Connect to an SSH server and authenticate with the given credentials.
     pub async fn connect(
         host: &str,
         port: u16,
         user: &str,
-        key_path: &str,
-        passphrase: Option<&str>,
+        credentials: AuthCredentials,
         timeout_secs: u64,
     ) -> Result<Self, TunnelError> {
-        let expanded_key_path = ConfigStore::expand_tilde(key_path);
-
         info!("Connecting to {}@{}:{}", user, host, port);
 
-        // Load the private key
-        let key_pair = russh_keys::load_secret_key(&expanded_key_path, passphrase)
-            .map_err(|e| TunnelError::AuthFailed(format!("Failed to load key: {}", e)))?;
+        // Extract ki_slot, app_handle, tunnel_id from credentials for the handler
+        let (ki_slot, app_handle, tunnel_id) = match &credentials {
+            AuthCredentials::KeyboardInteractive {
+                ki_slot,
+                app_handle,
+                tunnel_id,
+            } => (ki_slot.clone(), Some(app_handle.clone()), tunnel_id.clone()),
+            _ => (
+                Arc::new(std::sync::Mutex::new(None)),
+                None,
+                String::new(),
+            ),
+        };
 
         // Configure the SSH client
-        // Enable russh's built-in keepalive (sends keepalive@openssh.com global request).
-        // HealthMonitor checks is_closed() to detect when the connection drops.
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(timeout_secs * 3)),
             keepalive_interval: Some(Duration::from_secs(15)),
@@ -137,6 +181,9 @@ impl SshConnection {
             host: host.to_string(),
             port,
             check_result: check_result.clone(),
+            ki_slot,
+            app_handle,
+            tunnel_id,
         };
 
         // Connect with timeout
@@ -149,55 +196,284 @@ impl SshConnection {
         {
             Ok(Ok(session)) => session,
             Ok(Err(e)) => {
-                // Check if this was a host key rejection
-                if let Some(result) = check_result.lock().unwrap().take() {
-                    match result {
-                        HostKeyCheckResult::Unknown(pubkey) => {
-                            let fingerprint = pubkey.fingerprint();
-                            let key_type = pubkey.name().to_string();
-                            // Store for later acceptance
-                            let map_key = format!("{}:{}", host, port);
-                            PENDING_HOST_KEYS
-                                .lock()
-                                .unwrap()
-                                .insert(map_key, pubkey);
-                            return Err(TunnelError::HostKeyUnknown {
-                                host: host.to_string(),
-                                port,
-                                key_type,
-                                fingerprint,
-                            });
-                        }
-                        HostKeyCheckResult::Changed => {
-                            return Err(TunnelError::HostKeyChanged {
-                                host: host.to_string(),
-                                port,
-                            });
-                        }
-                    }
-                }
-                return Err(TunnelError::SshError(format!(
-                    "Connection failed: {}",
-                    e
-                )));
+                return Self::handle_host_key_error(host, port, check_result, e);
             }
             Err(_) => return Err(TunnelError::ConnectionTimeout),
         };
 
         // Authenticate
-        let auth_result = session
-            .authenticate_publickey(user, Arc::new(key_pair))
-            .await
-            .map_err(|e| TunnelError::AuthFailed(format!("Auth error: {}", e)))?;
-
-        if !auth_result {
-            return Err(TunnelError::AuthFailed(
-                "Server rejected public key".to_string(),
-            ));
-        }
+        Self::authenticate(&mut session, user, credentials).await?;
 
         info!("SSH connection established to {}:{}", host, port);
         Ok(Self { session })
+    }
+
+    /// Connect to an SSH server over an existing stream (e.g. a ProxyJump channel).
+    pub async fn connect_stream<R: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+        stream: R,
+        host: &str,
+        port: u16,
+        user: &str,
+        credentials: AuthCredentials,
+        timeout_secs: u64,
+    ) -> Result<Self, TunnelError> {
+        info!("Connecting to {}@{}:{} via stream", user, host, port);
+
+        // Extract ki_slot, app_handle, tunnel_id from credentials for the handler
+        let (ki_slot, app_handle, tunnel_id) = match &credentials {
+            AuthCredentials::KeyboardInteractive {
+                ki_slot,
+                app_handle,
+                tunnel_id,
+            } => (ki_slot.clone(), Some(app_handle.clone()), tunnel_id.clone()),
+            _ => (
+                Arc::new(std::sync::Mutex::new(None)),
+                None,
+                String::new(),
+            ),
+        };
+
+        // Configure the SSH client
+        let config = client::Config {
+            inactivity_timeout: Some(Duration::from_secs(timeout_secs * 3)),
+            keepalive_interval: Some(Duration::from_secs(15)),
+            keepalive_max: 3,
+            ..Default::default()
+        };
+
+        let check_result = Arc::new(std::sync::Mutex::new(None));
+        let handler = SshClientHandler {
+            host: host.to_string(),
+            port,
+            check_result: check_result.clone(),
+            ki_slot,
+            app_handle,
+            tunnel_id,
+        };
+
+        // Connect over stream with timeout
+        let mut session = match tokio::time::timeout(
+            Duration::from_secs(timeout_secs),
+            client::connect_stream(Arc::new(config), stream, handler),
+        )
+        .await
+        {
+            Ok(Ok(session)) => session,
+            Ok(Err(e)) => {
+                return Self::handle_host_key_error(host, port, check_result, e);
+            }
+            Err(_) => return Err(TunnelError::ConnectionTimeout),
+        };
+
+        // Authenticate
+        Self::authenticate(&mut session, user, credentials).await?;
+
+        info!("SSH connection established to {}:{} via stream", host, port);
+        Ok(Self { session })
+    }
+
+    /// Handle host key errors from a failed connection attempt.
+    fn handle_host_key_error(
+        host: &str,
+        port: u16,
+        check_result: Arc<std::sync::Mutex<Option<HostKeyCheckResult>>>,
+        e: russh::Error,
+    ) -> Result<Self, TunnelError> {
+        if let Some(result) = check_result.lock().unwrap().take() {
+            match result {
+                HostKeyCheckResult::Unknown(pubkey) => {
+                    let fingerprint = pubkey.fingerprint();
+                    let key_type = pubkey.name().to_string();
+                    // Store for later acceptance
+                    let map_key = format!("{}:{}", host, port);
+                    PENDING_HOST_KEYS
+                        .lock()
+                        .unwrap()
+                        .insert(map_key, pubkey);
+                    return Err(TunnelError::HostKeyUnknown {
+                        host: host.to_string(),
+                        port,
+                        key_type,
+                        fingerprint,
+                    });
+                }
+                HostKeyCheckResult::Changed => {
+                    return Err(TunnelError::HostKeyChanged {
+                        host: host.to_string(),
+                        port,
+                    });
+                }
+            }
+        }
+        Err(TunnelError::SshError(format!(
+            "Connection failed: {}",
+            e
+        )))
+    }
+
+    /// Dispatch authentication based on the credential type.
+    async fn authenticate(
+        session: &mut client::Handle<SshClientHandler>,
+        user: &str,
+        credentials: AuthCredentials,
+    ) -> Result<(), TunnelError> {
+        match credentials {
+            AuthCredentials::Key {
+                key_path,
+                passphrase,
+            } => {
+                let expanded_key_path = ConfigStore::expand_tilde(&key_path);
+                let key_pair =
+                    russh_keys::load_secret_key(&expanded_key_path, passphrase.as_deref())
+                        .map_err(|e| {
+                            TunnelError::AuthFailed(format!("Failed to load key: {}", e))
+                        })?;
+
+                let auth_result = session
+                    .authenticate_publickey(user, Arc::new(key_pair))
+                    .await
+                    .map_err(|e| TunnelError::AuthFailed(format!("Auth error: {}", e)))?;
+
+                if !auth_result {
+                    return Err(TunnelError::AuthFailed(
+                        "Server rejected public key".to_string(),
+                    ));
+                }
+            }
+            AuthCredentials::Password(password) => {
+                let auth_result = session
+                    .authenticate_password(user, &password)
+                    .await
+                    .map_err(|e| TunnelError::AuthFailed(format!("Auth error: {}", e)))?;
+
+                if !auth_result {
+                    return Err(TunnelError::AuthFailed(
+                        "Server rejected password".to_string(),
+                    ));
+                }
+            }
+            AuthCredentials::Agent => {
+                Self::authenticate_with_agent(session, user).await?;
+            }
+            AuthCredentials::KeyboardInteractive {
+                ki_slot,
+                app_handle,
+                tunnel_id,
+            } => {
+                use tauri::Emitter;
+
+                let mut response = session
+                    .authenticate_keyboard_interactive_start(user, None)
+                    .await
+                    .map_err(|e| TunnelError::AuthFailed(format!("Auth error: {}", e)))?;
+
+                loop {
+                    match response {
+                        client::KeyboardInteractiveAuthResponse::Success => break,
+                        client::KeyboardInteractiveAuthResponse::Failure => {
+                            return Err(TunnelError::AuthFailed(
+                                "Keyboard-interactive authentication failed".to_string(),
+                            ));
+                        }
+                        client::KeyboardInteractiveAuthResponse::InfoRequest {
+                            name,
+                            instructions,
+                            prompts,
+                        } => {
+                            let (tx, rx) = tokio::sync::oneshot::channel();
+                            *ki_slot.lock().unwrap() = Some(tx);
+
+                            let prompt = KeyboardInteractivePrompt {
+                                tunnel_id: tunnel_id.clone(),
+                                name,
+                                instructions,
+                                prompts: prompts
+                                    .iter()
+                                    .map(|p| KiPromptEntry {
+                                        text: p.prompt.clone(),
+                                        echo: p.echo,
+                                    })
+                                    .collect(),
+                            };
+                            let _ = app_handle.emit("keyboard-interactive-prompt", &prompt);
+
+                            let answers = rx.await.map_err(|_| {
+                                TunnelError::AuthFailed(
+                                    "Keyboard-interactive dialog cancelled".to_string(),
+                                )
+                            })?;
+
+                            response = session
+                                .authenticate_keyboard_interactive_respond(answers)
+                                .await
+                                .map_err(|e| {
+                                    TunnelError::AuthFailed(format!("Auth error: {}", e))
+                                })?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Authenticate using the SSH agent.
+    async fn authenticate_with_agent(
+        session: &mut client::Handle<SshClientHandler>,
+        user: &str,
+    ) -> Result<(), TunnelError> {
+        #[cfg(unix)]
+        let mut agent = russh_keys::agent::client::AgentClient::connect_env()
+            .await
+            .map_err(|e| {
+                TunnelError::AgentUnavailable(format!(
+                    "SSH agent not available — {}. Try launching from a terminal or ensure your agent is running.",
+                    e
+                ))
+            })?;
+
+        #[cfg(windows)]
+        let mut agent = {
+            let pipe = tokio::net::windows::named_pipe::ClientOptions::new()
+                .open(r"\\.\pipe\openssh-ssh-agent")
+                .map_err(|e| {
+                    TunnelError::AgentUnavailable(format!("SSH agent not available — {}", e))
+                })?;
+            russh_keys::agent::client::AgentClient::connect(pipe)
+        };
+
+        let identities = agent.request_identities().await.map_err(|e| {
+            TunnelError::AgentUnavailable(format!("Failed to list agent keys: {}", e))
+        })?;
+
+        if identities.is_empty() {
+            return Err(TunnelError::AgentUnavailable(
+                "SSH agent has no keys loaded".to_string(),
+            ));
+        }
+
+        let mut accepted = false;
+        for pubkey in identities {
+            let (returned_agent, result) = session.authenticate_future(user, pubkey, agent).await;
+            agent = returned_agent;
+            match result {
+                Ok(true) => {
+                    accepted = true;
+                    break;
+                }
+                Ok(false) => continue,
+                Err(e) => {
+                    return Err(TunnelError::AuthFailed(format!("Agent auth error: {}", e)))
+                }
+            }
+        }
+
+        if !accepted {
+            return Err(TunnelError::AuthFailed(
+                "No agent key accepted by server".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     /// Request a direct-tcpip channel for local port forwarding.
