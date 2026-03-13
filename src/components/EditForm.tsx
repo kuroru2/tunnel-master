@@ -1,27 +1,23 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { TunnelInput, TunnelConfig } from "../types";
+import type { TunnelInput, TunnelConfig, TunnelInfo, AuthMethod } from "../types";
 
 interface EditFormProps {
   tunnelId: string | null;
+  tunnels: TunnelInfo[];
   getTunnelConfig: (id: string) => Promise<TunnelConfig>;
   onSave: (input: TunnelInput, id: string | null) => Promise<void>;
   onBack: () => void;
 }
 
 const emptyForm: TunnelInput = {
-  name: "",
-  host: "",
-  port: 22,
-  user: "",
-  keyPath: "",
-  localPort: 0,
-  remoteHost: "",
-  remotePort: 0,
-  autoConnect: false,
+  name: "", host: "", port: 22, user: "", keyPath: "",
+  authMethod: "key",
+  localPort: 0, remoteHost: "", remotePort: 0, autoConnect: false,
+  jumpHost: null,
 };
 
-export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditFormProps) {
+export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }: EditFormProps) {
   const [form, setForm] = useState<TunnelInput>(emptyForm);
   const [loading, setLoading] = useState(!!tunnelId);
   const [saving, setSaving] = useState(false);
@@ -37,10 +33,12 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
             port: config.port,
             user: config.user,
             keyPath: config.keyPath,
+            authMethod: config.authMethod,
             localPort: config.localPort,
             remoteHost: config.remoteHost,
             remotePort: config.remotePort,
             autoConnect: config.autoConnect,
+            jumpHost: config.jumpHost,
           });
         })
         .catch((e) => setError(String(e)))
@@ -123,33 +121,68 @@ export function EditForm({ tunnelId, getTunnelConfig, onSave, onBack }: EditForm
             mono
           />
           <FormRow label="Username" value={form.user} onChange={(v) => updateField("user", v)} />
-          <div className="flex items-center px-3 py-2">
-            <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">Key</label>
-            <input
-              type="text"
-              value={form.keyPath}
-              onChange={(e) => updateField("keyPath", e.target.value)}
-              placeholder="~/.ssh/id_rsa"
-              className="flex-1 bg-transparent text-sm outline-none placeholder-[#bbb] dark:placeholder-[#555]"
-              style={{ fontFamily: "var(--font-mono)" }}
-            />
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const path = await invoke<string | null>("pick_key_file");
-                  if (path) updateField("keyPath", path);
-                } catch (e) {
-                  setError(String(e));
-                }
-              }}
-              className="ml-2 text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999] flex-shrink-0"
-              title="Browse for key file"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                <path fillRule="evenodd" d="M3.75 3A1.75 1.75 0 002 4.75v3.26a3.235 3.235 0 011.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0016.25 5h-4.836a.25.25 0 01-.177-.073L9.823 3.513A1.75 1.75 0 008.586 3H3.75zM3.75 9A1.75 1.75 0 002 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0018 15.25v-4.5A1.75 1.75 0 0016.25 9H3.75z" clipRule="evenodd" />
-              </svg>
-            </button>
+
+          {/* Auth Method */}
+          <div className="flex items-center px-3 py-2 border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]">
+            <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">Auth</label>
+            <div className="flex gap-1 flex-1">
+              {(["key", "password", "agent", "keyboard-interactive"] as AuthMethod[]).map((method) => {
+                const labels: Record<AuthMethod, string> = { key: "Key", password: "Password", agent: "Agent", "keyboard-interactive": "2FA" };
+                return (
+                  <button key={method} type="button" onClick={() => updateField("authMethod", method)}
+                    className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                      form.authMethod === method
+                        ? "bg-[#1a1a1a] dark:bg-[#e5e5e5] text-white dark:text-[#0f0f0f] font-medium"
+                        : "text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999]"
+                    }`}>
+                    {labels[method]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {form.authMethod === "key" && (
+            <div className="flex items-center px-3 py-2">
+              <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">Key</label>
+              <input
+                type="text"
+                value={form.keyPath}
+                onChange={(e) => updateField("keyPath", e.target.value)}
+                placeholder="~/.ssh/id_rsa"
+                className="flex-1 bg-transparent text-sm outline-none placeholder-[#bbb] dark:placeholder-[#555]"
+                style={{ fontFamily: "var(--font-mono)" }}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const path = await invoke<string | null>("pick_key_file");
+                    if (path) updateField("keyPath", path);
+                  } catch (e) {
+                    setError(String(e));
+                  }
+                }}
+                className="ml-2 text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999] flex-shrink-0"
+                title="Browse for key file"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M3.75 3A1.75 1.75 0 002 4.75v3.26a3.235 3.235 0 011.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0016.25 5h-4.836a.25.25 0 01-.177-.073L9.823 3.513A1.75 1.75 0 008.586 3H3.75zM3.75 9A1.75 1.75 0 002 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0018 15.25v-4.5A1.75 1.75 0 0016.25 9H3.75z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Jump Host */}
+          <div className="flex items-center px-3 py-2 border-t border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]">
+            <label className="text-sm text-[#999] dark:text-[#666] w-[70px] flex-shrink-0">Jump</label>
+            <select value={form.jumpHost ?? ""} onChange={(e) => updateField("jumpHost", e.target.value || null)}
+              className="flex-1 bg-transparent text-sm outline-none text-[#1a1a1a] dark:text-[#e5e5e5]">
+              <option value="">None</option>
+              {tunnels.filter((t) => t.id !== tunnelId).map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
           </div>
         </div>
 
