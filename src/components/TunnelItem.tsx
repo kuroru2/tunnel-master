@@ -35,37 +35,27 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
     clearTimeout(minVisTimerRef.current);
 
     // Entering connecting state — record timestamp
+    // showConnecting extends the visual beyond the actual "connecting" status;
+    // while status === "connecting", visuallyConnecting is already true via the prop check
     if (curr === "connecting" && prev !== "connecting") {
       connectStartRef.current = Date.now();
-      setShowConnecting(true);
+      minVisTimerRef.current = setTimeout(() => setShowConnecting(true), 0);
     }
 
-    // Leaving connecting state
+    // Leaving connecting state — schedule visual transitions via timers
+    // (all setState calls are async via setTimeout to avoid synchronous cascading renders)
     if (prev === "connecting" && curr !== "connecting") {
       const elapsed = Date.now() - connectStartRef.current;
-      const remaining = Math.max(0, 400 - elapsed);
+      const delay = Math.max(0, 400 - elapsed);
+      const isFail = curr === "error" || curr === "disconnected";
 
-      if (curr === "error" || curr === "disconnected") {
-        // Failure: show connecting for remaining min-visible, then trigger fail animation
-        if (remaining > 0) {
-          minVisTimerRef.current = setTimeout(() => {
-            setShowConnecting(false);
-            setRecentlyFailed(true);
-            failTimerRef.current = setTimeout(() => setRecentlyFailed(false), 600);
-          }, remaining);
-        } else {
-          setShowConnecting(false);
+      minVisTimerRef.current = setTimeout(() => {
+        setShowConnecting(false);
+        if (isFail) {
           setRecentlyFailed(true);
           failTimerRef.current = setTimeout(() => setRecentlyFailed(false), 600);
         }
-      } else {
-        // Success or other transition: just clear after min-visible
-        if (remaining > 0) {
-          minVisTimerRef.current = setTimeout(() => setShowConnecting(false), remaining);
-        } else {
-          setShowConnecting(false);
-        }
-      }
+      }, delay);
     }
 
     prevStatusRef.current = curr;
