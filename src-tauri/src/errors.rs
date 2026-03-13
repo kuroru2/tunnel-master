@@ -35,6 +35,18 @@ pub enum TunnelError {
         port: u16,
     },
 
+    #[error("PASSWORD_REQUIRED:{0}")]
+    PasswordRequired(String),
+
+    #[error("SSH agent not available: {0}")]
+    AgentUnavailable(String),
+
+    #[error("Jump host not found: {0}")]
+    JumpHostNotFound(String),
+
+    #[error("Jump host connection failed: {0}")]
+    JumpHostFailed(String),
+
     #[error("Tunnel not found: {0}")]
     TunnelNotFound(String),
 }
@@ -66,5 +78,17 @@ mod tests {
         let err = TunnelError::ConnectionTimeout;
         let json = serde_json::to_string(&err).unwrap();
         assert!(json.contains("ConnectionTimeout"));
+    }
+
+    #[test]
+    fn password_required_format() {
+        let err = TunnelError::PasswordRequired("my-tunnel".into());
+        assert_eq!(err.to_string(), "PASSWORD_REQUIRED:my-tunnel");
+    }
+
+    #[test]
+    fn agent_unavailable_format() {
+        let err = TunnelError::AgentUnavailable("not found".into());
+        assert!(err.to_string().contains("SSH agent not available"));
     }
 }
