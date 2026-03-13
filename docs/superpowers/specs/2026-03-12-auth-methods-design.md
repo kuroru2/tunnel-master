@@ -255,6 +255,8 @@ If `SSH_AUTH_SOCK` is not set (Unix) or the named pipe is unreachable (Windows):
 
 No credentials to store — the agent handles key management.
 
+**Note on GUI launches:** When the app is launched from a desktop shortcut (not a terminal), `SSH_AUTH_SOCK` may not be inherited. The error message should be clear about this (`"SSH agent not available — SSH_AUTH_SOCK not set. Try launching from a terminal or ensure your agent is running."`). A future enhancement could allow specifying a custom agent socket path in Settings, but this is out of scope for now.
+
 ### Keyboard-Interactive (2FA)
 
 Two-phase flow requiring synchronization between the russh `Handler` callback and the frontend UI.
@@ -647,15 +649,24 @@ The existing `handle_remove_tunnel` in the manager gains cleanup steps:
 // In handle_remove_tunnel (manager.rs):
 fn handle_remove_tunnel(&mut self, tunnel_id: &str) {
     // 1. Disconnect if connected (existing)
-    // 2. Clear dangling jump host references in other tunnels (in-memory)
+    // 2. Disconnect dependent tunnels whose jump host is being deleted
+    let dependents: Vec<String> = self.tunnels.iter()
+        .filter(|(_, s)| s.config.jump_host.as_deref() == Some(tunnel_id))
+        .filter(|(_, s)| s.status == TunnelStatus::Connected || s.status == TunnelStatus::Connecting)
+        .map(|(id, _)| id.clone())
+        .collect();
+    for dep_id in &dependents {
+        self.disconnect_tunnel(dep_id).await;
+    }
+    // 3. Clear dangling jump host references in other tunnels (in-memory)
     for state in self.tunnels.values_mut() {
         if state.config.jump_host.as_deref() == Some(tunnel_id) {
             state.config.jump_host = None;
         }
     }
-    // 3. Remove from map (existing)
+    // 4. Remove from map (existing)
     self.tunnels.remove(tunnel_id);
-    // 4. Delete password from keyring (if any)
+    // 5. Delete password from keyring (if any)
     crate::keychain::delete_password(tunnel_id);
 }
 ```
@@ -689,8 +700,9 @@ This keeps the in-memory state (manager) and on-disk state (config.json) consist
 - When `2FA`: hide Key path
 
 **Jump Host dropdown** — New field at the bottom of the Connection section:
-- Options: `None` + list of other tunnel names (excluding self)
+- Options: `None` + list of other tunnel names (excluding self, and excluding tunnels that would create a loop)
 - Label: "Jump Host"
+- Loop prevention: when building the dropdown options, walk each candidate's jump chain — if the current tunnel's ID appears anywhere in that chain, exclude it. This prevents both direct loops (A↔B) and indirect loops (A→B→C→A).
 - When a jump host is selected, the TunnelItem shows "via {jump_name}" in its subtitle
 
 ### TunnelInput (TypeScript)
@@ -873,6 +885,16 @@ pub fn delete_password(tunnel_id: &str) {
 ```
 
 On tunnel deletion: call `delete_password(tunnel_id)`. Passphrase cleanup is not needed since passphrases are keyed by key path (which may be shared across tunnels).
+
+## Testing Strategy
+
+- **Unit tests:** Auth credential building, jump chain validation (circular detection, depth limit), dangling reference cleanup, keychain get/store/delete for passwords
+- **Integration tests:** Use a mock SSH server (e.g., `russh::server` or a Docker container with `sshd`) to verify:
+  - Password auth flow (correct password accepted, wrong rejected)
+  - SSH agent auth (with `ssh-agent` running)
+  - Keyboard-interactive 2FA prompt/response flow — this requires a mock server that sends KI challenges, and a test harness that feeds responses through the `ki_slot` oneshot channel
+  - ProxyJump through a jump host container to a destination container
+- **Frontend tests:** Manual verification of form conditional visibility (auth method selector hiding/showing key path), jump host dropdown loop prevention, KI dialog rendering
 
 ## What's NOT Included
 
