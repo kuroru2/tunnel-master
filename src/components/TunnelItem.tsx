@@ -17,7 +17,6 @@ const STATUS_DOT: Record<TunnelStatus, string> = {
 
 export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps) {
   const isConnected = tunnel.status === "connected";
-  const isBusy = tunnel.status === "connecting" || tunnel.status === "disconnecting";
 
   // -- Toggle feedback state --
   const prevStatusRef = useRef<TunnelStatus>(tunnel.status);
@@ -30,6 +29,10 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
   useEffect(() => {
     const prev = prevStatusRef.current;
     const curr = tunnel.status;
+
+    // Clear any pending timers before scheduling new ones
+    clearTimeout(failTimerRef.current);
+    clearTimeout(minVisTimerRef.current);
 
     // Entering connecting state — record timestamp
     if (curr === "connecting" && prev !== "connecting") {
@@ -80,7 +83,7 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
   const visuallyBusy = visuallyConnecting || tunnel.status === "disconnecting";
 
   const handleToggle = () => {
-    if (isBusy || visuallyBusy || recentlyFailed) return;
+    if (visuallyBusy || recentlyFailed) return;
     if (isConnected) {
       onDisconnect(tunnel.id);
     } else {

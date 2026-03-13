@@ -8,6 +8,13 @@
 
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   --glow-green: 0 0 4px rgba(74, 222, 128, 0.4);
+  --toggle-off: #ccc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --toggle-off: #333;
+  }
 }
 
 body {
@@ -26,5 +33,5 @@ body {
 
 @keyframes flash-red {
   0% { background-color: #ef4444; }
-  100% { background-color: #ccc; }
+  100% { background-color: var(--toggle-off); }
 }
