@@ -89,9 +89,6 @@ struct SshClientHandler {
     host: String,
     port: u16,
     check_result: Arc<std::sync::Mutex<Option<HostKeyCheckResult>>>,
-    ki_slot: KiResponseSlot,
-    app_handle: Option<tauri::AppHandle>,
-    tunnel_id: String,
 }
 
 #[async_trait]
@@ -154,20 +151,6 @@ impl SshConnection {
     ) -> Result<Self, TunnelError> {
         info!("Connecting to {}@{}:{}", user, host, port);
 
-        // Extract ki_slot, app_handle, tunnel_id from credentials for the handler
-        let (ki_slot, app_handle, tunnel_id) = match &credentials {
-            AuthCredentials::KeyboardInteractive {
-                ki_slot,
-                app_handle,
-                tunnel_id,
-            } => (ki_slot.clone(), Some(app_handle.clone()), tunnel_id.clone()),
-            _ => (
-                Arc::new(std::sync::Mutex::new(None)),
-                None,
-                String::new(),
-            ),
-        };
-
         // Configure the SSH client
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(timeout_secs * 3)),
@@ -181,9 +164,6 @@ impl SshConnection {
             host: host.to_string(),
             port,
             check_result: check_result.clone(),
-            ki_slot,
-            app_handle,
-            tunnel_id,
         };
 
         // Connect with timeout
@@ -219,20 +199,6 @@ impl SshConnection {
     ) -> Result<Self, TunnelError> {
         info!("Connecting to {}@{}:{} via stream", user, host, port);
 
-        // Extract ki_slot, app_handle, tunnel_id from credentials for the handler
-        let (ki_slot, app_handle, tunnel_id) = match &credentials {
-            AuthCredentials::KeyboardInteractive {
-                ki_slot,
-                app_handle,
-                tunnel_id,
-            } => (ki_slot.clone(), Some(app_handle.clone()), tunnel_id.clone()),
-            _ => (
-                Arc::new(std::sync::Mutex::new(None)),
-                None,
-                String::new(),
-            ),
-        };
-
         // Configure the SSH client
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(timeout_secs * 3)),
@@ -246,9 +212,6 @@ impl SshConnection {
             host: host.to_string(),
             port,
             check_result: check_result.clone(),
-            ki_slot,
-            app_handle,
-            tunnel_id,
         };
 
         // Connect over stream with timeout
