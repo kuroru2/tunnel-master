@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { TunnelList } from "./components/TunnelList";
 import { PassphraseDialog } from "./components/PassphraseDialog";
 import { HostKeyDialog } from "./components/HostKeyDialog";
+import { PasswordDialog } from "./components/PasswordDialog";
+import { KeyboardInteractiveDialog } from "./components/KeyboardInteractiveDialog";
 import { EditList } from "./components/EditList";
 import { EditForm } from "./components/EditForm";
 import { useTunnels } from "./hooks/useTunnels";
@@ -26,6 +28,12 @@ function App() {
     hostKeyPrompt,
     acceptHostKey,
     rejectHostKey,
+    passwordPrompt,
+    submitPassword,
+    cancelPassword,
+    kiPrompt,
+    respondKeyboardInteractive,
+    cancelKeyboardInteractive,
     addTunnel,
     updateTunnel,
     deleteTunnel,
@@ -61,6 +69,7 @@ function App() {
     return (
       <EditForm
         tunnelId={view.tunnelId}
+        tunnels={tunnels}
         getTunnelConfig={getTunnelConfig}
         onSave={handleSave}
         onBack={() => setView({ kind: "edit-list" })}
@@ -145,6 +154,16 @@ function App() {
           onAccept={acceptHostKey}
           onReject={rejectHostKey}
         />
+      )}
+
+      {/* Password dialog */}
+      {passwordPrompt && (
+        <PasswordDialog tunnelName={passwordPrompt.tunnelName} onSubmit={submitPassword} onCancel={cancelPassword} />
+      )}
+
+      {/* Keyboard-interactive dialog */}
+      {kiPrompt && (
+        <KeyboardInteractiveDialog name={kiPrompt.name} instructions={kiPrompt.instructions} prompts={kiPrompt.prompts} onSubmit={respondKeyboardInteractive} onCancel={cancelKeyboardInteractive} />
       )}
     </div>
   );
