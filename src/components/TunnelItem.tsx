@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import type { TunnelInfo, TunnelStatus } from "../types";
 
 interface TunnelItemProps {
@@ -18,8 +19,68 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
   const isConnected = tunnel.status === "connected";
   const isBusy = tunnel.status === "connecting" || tunnel.status === "disconnecting";
 
+  // -- Toggle feedback state --
+  const prevStatusRef = useRef<TunnelStatus>(tunnel.status);
+  const connectStartRef = useRef<number>(0);
+  const failTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const minVisTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [recentlyFailed, setRecentlyFailed] = useState(false);
+  const [showConnecting, setShowConnecting] = useState(false);
+
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const curr = tunnel.status;
+
+    // Entering connecting state — record timestamp
+    if (curr === "connecting" && prev !== "connecting") {
+      connectStartRef.current = Date.now();
+      setShowConnecting(true);
+    }
+
+    // Leaving connecting state
+    if (prev === "connecting" && curr !== "connecting") {
+      const elapsed = Date.now() - connectStartRef.current;
+      const remaining = Math.max(0, 400 - elapsed);
+
+      if (curr === "error" || curr === "disconnected") {
+        // Failure: show connecting for remaining min-visible, then trigger fail animation
+        if (remaining > 0) {
+          minVisTimerRef.current = setTimeout(() => {
+            setShowConnecting(false);
+            setRecentlyFailed(true);
+            failTimerRef.current = setTimeout(() => setRecentlyFailed(false), 600);
+          }, remaining);
+        } else {
+          setShowConnecting(false);
+          setRecentlyFailed(true);
+          failTimerRef.current = setTimeout(() => setRecentlyFailed(false), 600);
+        }
+      } else {
+        // Success or other transition: just clear after min-visible
+        if (remaining > 0) {
+          minVisTimerRef.current = setTimeout(() => setShowConnecting(false), remaining);
+        } else {
+          setShowConnecting(false);
+        }
+      }
+    }
+
+    prevStatusRef.current = curr;
+  }, [tunnel.status]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(failTimerRef.current);
+      clearTimeout(minVisTimerRef.current);
+    };
+  }, []);
+
+  const visuallyConnecting = showConnecting || tunnel.status === "connecting";
+  const visuallyBusy = visuallyConnecting || tunnel.status === "disconnecting";
+
   const handleToggle = () => {
-    if (isBusy) return;
+    if (isBusy || visuallyBusy || recentlyFailed) return;
     if (isConnected) {
       onDisconnect(tunnel.id);
     } else {
@@ -57,23 +118,26 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
 
       <button
         onClick={handleToggle}
-        disabled={isBusy}
+        disabled={visuallyBusy || recentlyFailed}
         className={`shrink-0 ml-3 w-7 h-4 rounded-full relative transition-colors ${
-          isBusy ? "cursor-not-allowed" : "cursor-pointer"
+          visuallyBusy || recentlyFailed ? "cursor-not-allowed" : "cursor-pointer"
         } ${
-          isConnected || tunnel.status === "disconnecting"
+          recentlyFailed
+            ? ""
+            : isConnected || tunnel.status === "disconnecting"
             ? "bg-[#4ade80]"
-            : tunnel.status === "connecting"
+            : visuallyConnecting
             ? "bg-[#fbbf24]"
             : "bg-[#ccc] dark:bg-[#333]"
         }`}
+        style={recentlyFailed ? { animation: "flash-red 0.6s ease-out forwards, shake 0.4s ease-in-out" } : undefined}
         title={isConnected ? "Disconnect" : "Connect"}
       >
         <div
           className={`w-3 h-3 rounded-full absolute top-[2px] transition-transform ${
             isConnected || tunnel.status === "disconnecting"
               ? "translate-x-[14px] bg-white"
-              : tunnel.status === "connecting"
+              : visuallyConnecting
               ? "translate-x-[14px] bg-white animate-pulse"
               : "translate-x-[2px] bg-white dark:bg-[#888]"
           }`}
