@@ -176,12 +176,10 @@ pub fn run() {
         }
     });
 
-    let mut builder = tauri::Builder::default();
+    let builder = tauri::Builder::default();
 
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.plugin(tauri_nspanel::init());
-    }
+    let builder = builder.plugin(tauri_nspanel::init());
 
     builder
         .setup(move |app| {

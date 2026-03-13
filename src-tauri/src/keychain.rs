@@ -74,6 +74,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires OS credential store (macOS Keychain / Windows Credential Manager / Linux secret service)"]
     fn store_and_get_password_roundtrip() {
         let id = "test-roundtrip-tunnel-keychain";
         delete_password(id);
