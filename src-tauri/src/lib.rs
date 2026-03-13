@@ -216,7 +216,8 @@ pub fn run() {
 
             let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<TunnelStatusEvent>();
             let (error_tx, mut error_rx) = tokio::sync::mpsc::unbounded_channel::<types::TunnelErrorEvent>();
-            let manager = spawn_manager(config, Some(event_tx), Some(error_tx));
+            let app_handle_for_manager = app.handle().clone();
+            let manager = spawn_manager(config, Some(event_tx), Some(error_tx), Some(app_handle_for_manager));
 
             let app_handle = app.handle().clone();
             let manager_for_events = manager.clone();

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, oneshot};
@@ -7,10 +7,10 @@ use tracing::{debug, info, warn};
 use crate::config::store::ConfigStore;
 use crate::errors::TunnelError;
 use crate::keychain;
-use crate::tunnel::connection::SshConnection;
+use crate::tunnel::connection::{AuthCredentials, KiResponseSlot, SshConnection};
 use crate::tunnel::forwarder::PortForwarder;
 use crate::tunnel::health::HealthMonitor;
-use crate::types::{AppConfig, TunnelConfig, TunnelInfo, TunnelStatus, TunnelStatusEvent};
+use crate::types::{AppConfig, AuthMethod, TunnelConfig, TunnelInfo, TunnelStatus, TunnelStatusEvent};
 
 /// Messages the TunnelManager actor receives
 #[derive(Debug)]
@@ -55,6 +55,15 @@ pub enum ManagerCommand {
         id: String,
         reply: oneshot::Sender<Result<TunnelConfig, TunnelError>>,
     },
+    RespondKeyboardInteractive {
+        id: String,
+        responses: Vec<String>,
+        reply: oneshot::Sender<Result<(), TunnelError>>,
+    },
+    CancelKeyboardInteractive {
+        id: String,
+        reply: oneshot::Sender<Result<(), TunnelError>>,
+    },
     Shutdown {
         reply: oneshot::Sender<()>,
     },
@@ -69,6 +78,10 @@ struct TunnelState {
     abort_handles: Vec<tokio::task::AbortHandle>,
     /// Active SSH connection, if connected
     ssh_connection: Option<Arc<SshConnection>>,
+    /// Jump host SSH connection, if connected via ProxyJump
+    jump_connection: Option<Arc<SshConnection>>,
+    /// Keyboard-interactive response slot
+    ki_slot: Option<KiResponseSlot>,
     /// Generation counter to detect stale TunnelDied messages
     generation: u64,
 }
@@ -81,21 +94,9 @@ impl TunnelState {
             error_message: None,
             abort_handles: Vec::new(),
             ssh_connection: None,
+            jump_connection: None,
+            ki_slot: None,
             generation: 0,
-        }
-    }
-
-    fn to_info(&self) -> TunnelInfo {
-        TunnelInfo {
-            id: self.config.id.clone(),
-            name: self.config.name.clone(),
-            status: self.status.clone(),
-            local_port: self.config.local_port,
-            remote_host: self.config.remote_host.clone(),
-            remote_port: self.config.remote_port,
-            error_message: self.error_message.clone(),
-            auth_method: self.config.auth_method.clone(),  // NEW
-            jump_host_name: None,                          // NEW (placeholder until Task 6)
         }
     }
 }
@@ -107,12 +108,13 @@ pub fn spawn_manager(
     config: AppConfig,
     event_tx: Option<mpsc::UnboundedSender<TunnelStatusEvent>>,
     error_tx: Option<mpsc::UnboundedSender<crate::types::TunnelErrorEvent>>,
+    app_handle: Option<tauri::AppHandle>,
 ) -> ManagerHandle {
     let (tx, rx) = mpsc::channel(32);
     let manager_tx = tx.clone();
 
     tauri::async_runtime::spawn(async move {
-        let mut manager = TunnelManagerActor::new(config, event_tx, error_tx, manager_tx);
+        let mut manager = TunnelManagerActor::new(config, event_tx, error_tx, manager_tx, app_handle);
         manager.run(rx).await;
     });
 
@@ -125,6 +127,7 @@ struct TunnelManagerActor {
     error_tx: Option<mpsc::UnboundedSender<crate::types::TunnelErrorEvent>>,
     manager_tx: mpsc::Sender<ManagerCommand>,
     settings: crate::types::Settings,
+    app_handle: Option<tauri::AppHandle>,
 }
 
 impl TunnelManagerActor {
@@ -133,6 +136,7 @@ impl TunnelManagerActor {
         event_tx: Option<mpsc::UnboundedSender<TunnelStatusEvent>>,
         error_tx: Option<mpsc::UnboundedSender<crate::types::TunnelErrorEvent>>,
         manager_tx: mpsc::Sender<ManagerCommand>,
+        app_handle: Option<tauri::AppHandle>,
     ) -> Self {
         let mut tunnels = HashMap::new();
         for tc in config.tunnels {
@@ -145,7 +149,159 @@ impl TunnelManagerActor {
             error_tx,
             manager_tx,
             settings: config.settings,
+            app_handle,
         }
+    }
+
+    /// Build a TunnelInfo from a TunnelState, resolving the jump host name
+    fn tunnel_to_info(&self, tunnel: &TunnelState) -> TunnelInfo {
+        let jump_host_name = tunnel.config.jump_host.as_ref().and_then(|jump_id| {
+            self.tunnels.get(jump_id).map(|jt| jt.config.name.clone())
+        });
+        TunnelInfo {
+            id: tunnel.config.id.clone(),
+            name: tunnel.config.name.clone(),
+            status: tunnel.status.clone(),
+            local_port: tunnel.config.local_port,
+            remote_host: tunnel.config.remote_host.clone(),
+            remote_port: tunnel.config.remote_port,
+            error_message: tunnel.error_message.clone(),
+            auth_method: tunnel.config.auth_method.clone(),
+            jump_host_name,
+        }
+    }
+
+    /// Validate that a jump host chain doesn't loop or exceed max depth.
+    fn validate_jump_chain(&self, tunnel_id: &str) -> Result<(), TunnelError> {
+        let mut visited = HashSet::new();
+        visited.insert(tunnel_id.to_string());
+        let mut current_id = tunnel_id.to_string();
+
+        for _depth in 0..5 {
+            let jump_host = match self.tunnels.get(&current_id) {
+                Some(t) => t.config.jump_host.clone(),
+                None => return Err(TunnelError::TunnelNotFound(current_id)),
+            };
+            match jump_host {
+                None => return Ok(()), // end of chain
+                Some(jump_id) => {
+                    if !self.tunnels.contains_key(&jump_id) {
+                        return Err(TunnelError::JumpHostNotFound(jump_id));
+                    }
+                    if !visited.insert(jump_id.clone()) {
+                        return Err(TunnelError::ConfigInvalid(
+                            format!("Jump host chain contains a loop involving '{}'", jump_id),
+                        ));
+                    }
+                    current_id = jump_id;
+                }
+            }
+        }
+        Err(TunnelError::ConfigInvalid(
+            "Jump host chain exceeds maximum depth of 5".to_string(),
+        ))
+    }
+
+    /// Build AuthCredentials from a tunnel's auth_method
+    fn build_credentials(&mut self, tunnel_id: &str) -> Result<AuthCredentials, TunnelError> {
+        let tunnel = self.tunnels.get(tunnel_id)
+            .ok_or_else(|| TunnelError::TunnelNotFound(tunnel_id.to_string()))?;
+
+        match &tunnel.config.auth_method {
+            AuthMethod::Key => {
+                let expanded_key_path = ConfigStore::expand_tilde(&tunnel.config.key_path);
+                let passphrase = keychain::get_passphrase(
+                    expanded_key_path.to_string_lossy().as_ref(),
+                );
+                Ok(AuthCredentials::Key {
+                    key_path: tunnel.config.key_path.clone(),
+                    passphrase,
+                })
+            }
+            AuthMethod::Password => {
+                match keychain::get_password(tunnel_id) {
+                    Some(password) => Ok(AuthCredentials::Password(password)),
+                    None => Err(TunnelError::PasswordRequired(tunnel_id.to_string())),
+                }
+            }
+            AuthMethod::Agent => Ok(AuthCredentials::Agent),
+            AuthMethod::KeyboardInteractive => {
+                let app_handle = self.app_handle.clone().ok_or_else(|| {
+                    TunnelError::AuthFailed(
+                        "Keyboard-interactive auth requires an app handle".to_string(),
+                    )
+                })?;
+                let ki_slot: KiResponseSlot = Arc::new(std::sync::Mutex::new(None));
+                // Store the slot in the tunnel state
+                let tunnel = self.tunnels.get_mut(tunnel_id).unwrap();
+                tunnel.ki_slot = Some(ki_slot.clone());
+                Ok(AuthCredentials::KeyboardInteractive {
+                    ki_slot,
+                    app_handle,
+                    tunnel_id: tunnel_id.to_string(),
+                })
+            }
+        }
+    }
+
+    /// Connect to a destination via a jump host using direct-tcpip channel.
+    async fn connect_via_jump(
+        &mut self,
+        id: &str,
+        jump_id: &str,
+    ) -> Result<Arc<SshConnection>, TunnelError> {
+        // Build credentials and connect to the jump host
+        let jump_credentials = self.build_credentials(jump_id)?;
+        let (jump_host, jump_port, jump_user) = {
+            let jt = self.tunnels.get(jump_id).unwrap();
+            (jt.config.host.clone(), jt.config.port, jt.config.user.clone())
+        };
+
+        let timeout_secs = self.settings.connection_timeout_secs;
+
+        let jump_ssh = SshConnection::connect(
+            &jump_host,
+            jump_port,
+            &jump_user,
+            jump_credentials,
+            timeout_secs,
+        )
+        .await
+        .map_err(|e| TunnelError::JumpHostFailed(format!("Failed to connect to jump host: {}", e)))?;
+
+        let jump_ssh = Arc::new(jump_ssh);
+
+        // Open direct-tcpip channel to the destination
+        let (dest_host, dest_port, dest_user) = {
+            let t = self.tunnels.get(id).unwrap();
+            (t.config.host.clone(), t.config.port, t.config.user.clone())
+        };
+
+        let channel = jump_ssh
+            .open_direct_tcpip(&dest_host, dest_port, "127.0.0.1", 0)
+            .await
+            .map_err(|e| TunnelError::JumpHostFailed(format!("Failed to open channel through jump host: {}", e)))?;
+
+        let stream = channel.into_stream();
+
+        // Build credentials for the destination
+        let dest_credentials = self.build_credentials(id)?;
+
+        let dest_ssh = SshConnection::connect_stream(
+            stream,
+            &dest_host,
+            dest_port,
+            &dest_user,
+            dest_credentials,
+            timeout_secs,
+        )
+        .await?;
+
+        // Store the jump connection
+        let tunnel = self.tunnels.get_mut(id).unwrap();
+        tunnel.jump_connection = Some(jump_ssh);
+
+        Ok(Arc::new(dest_ssh))
     }
 
     async fn run(&mut self, mut rx: mpsc::Receiver<ManagerCommand>) {
@@ -155,7 +311,7 @@ impl TunnelManagerActor {
             match cmd {
                 ManagerCommand::ListTunnels { reply } => {
                     let infos: Vec<TunnelInfo> =
-                        self.tunnels.values().map(|t| t.to_info()).collect();
+                        self.tunnels.values().map(|t| self.tunnel_to_info(t)).collect();
                     let _ = reply.send(infos);
                 }
 
@@ -209,6 +365,16 @@ impl TunnelManagerActor {
                     let _ = reply.send(result);
                 }
 
+                ManagerCommand::RespondKeyboardInteractive { id, responses, reply } => {
+                    let result = self.handle_respond_ki(&id, responses);
+                    let _ = reply.send(result);
+                }
+
+                ManagerCommand::CancelKeyboardInteractive { id, reply } => {
+                    let result = self.handle_cancel_ki(&id);
+                    let _ = reply.send(result);
+                }
+
                 ManagerCommand::Shutdown { reply } => {
                     info!("TunnelManager received shutdown command");
                     self.disconnect_all().await;
@@ -222,9 +388,34 @@ impl TunnelManagerActor {
         self.disconnect_all().await;
     }
 
+    fn handle_respond_ki(&mut self, id: &str, responses: Vec<String>) -> Result<(), TunnelError> {
+        let tunnel = self.tunnels.get_mut(id)
+            .ok_or_else(|| TunnelError::TunnelNotFound(id.to_string()))?;
+
+        if let Some(ki_slot) = &tunnel.ki_slot {
+            if let Some(tx) = ki_slot.lock().unwrap().take() {
+                let _ = tx.send(responses);
+                Ok(())
+            } else {
+                Err(TunnelError::SshError("No pending keyboard-interactive prompt".to_string()))
+            }
+        } else {
+            Err(TunnelError::SshError("No keyboard-interactive session active".to_string()))
+        }
+    }
+
+    fn handle_cancel_ki(&mut self, id: &str) -> Result<(), TunnelError> {
+        let tunnel = self.tunnels.get_mut(id)
+            .ok_or_else(|| TunnelError::TunnelNotFound(id.to_string()))?;
+
+        // Drop the ki_slot, which will cause the oneshot receiver to get a RecvError
+        tunnel.ki_slot.take();
+        Ok(())
+    }
+
     async fn handle_connect(&mut self, id: &str) -> Result<(), TunnelError> {
-        // Extract config data we need before any mutable borrows
-        let (host, port, user, key_path, local_port, remote_host, remote_port) = {
+        // Check tunnel exists and is not already connected
+        {
             let tunnel = self
                 .tunnels
                 .get_mut(id)
@@ -239,53 +430,78 @@ impl TunnelManagerActor {
 
             tunnel.status = TunnelStatus::Connecting;
             tunnel.error_message = None;
-
-            (
-                tunnel.config.host.clone(),
-                tunnel.config.port,
-                tunnel.config.user.clone(),
-                tunnel.config.key_path.clone(),
-                tunnel.config.local_port,
-                tunnel.config.remote_host.clone(),
-                tunnel.config.remote_port,
-            )
-        };
+        }
         self.emit_status(id, &TunnelStatus::Connecting);
+
+        // Validate jump chain before attempting connection
+        if let Err(e) = self.validate_jump_chain(id) {
+            let tunnel = self.tunnels.get_mut(id).unwrap();
+            tunnel.status = TunnelStatus::Disconnected;
+            tunnel.error_message = Some(e.to_string());
+            self.emit_status(id, &TunnelStatus::Disconnected);
+            return Err(e);
+        }
 
         let timeout_secs = self.settings.connection_timeout_secs;
         let keepalive_interval = self.settings.keepalive_interval_secs;
         let keepalive_timeout = self.settings.keepalive_timeout_secs;
 
-        // Get passphrase from keychain using expanded path
-        let expanded_key_path = ConfigStore::expand_tilde(&key_path);
-        let passphrase = keychain::get_passphrase(
-            expanded_key_path.to_string_lossy().as_ref(),
-        );
-
-        // Attempt SSH connection
-        let credentials = crate::tunnel::connection::AuthCredentials::Key {
-            key_path: key_path.clone(),
-            passphrase: passphrase.clone(),
+        // Extract what we need for the connection
+        let (local_port, remote_host, remote_port, jump_host) = {
+            let tunnel = self.tunnels.get(id).unwrap();
+            (
+                tunnel.config.local_port,
+                tunnel.config.remote_host.clone(),
+                tunnel.config.remote_port,
+                tunnel.config.jump_host.clone(),
+            )
         };
-        let ssh = match SshConnection::connect(
-            &host,
-            port,
-            &user,
-            credentials,
-            timeout_secs,
-        )
-        .await
-        {
-            Ok(conn) => Arc::new(conn),
-            Err(e) => {
-                let error_msg = e.to_string();
-                {
+
+        // Connect: with or without jump host
+        let ssh = if let Some(jump_id) = jump_host {
+            match self.connect_via_jump(id, &jump_id).await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    let error_msg = e.to_string();
                     let tunnel = self.tunnels.get_mut(id).unwrap();
                     tunnel.status = TunnelStatus::Disconnected;
-                    tunnel.error_message = Some(error_msg.clone());
+                    tunnel.error_message = Some(error_msg);
+                    tunnel.jump_connection = None;
+                    tunnel.ki_slot = None;
+                    self.emit_status(id, &TunnelStatus::Disconnected);
+                    return Err(e);
                 }
-                self.emit_status(id, &TunnelStatus::Disconnected);
-                return Err(e);
+            }
+        } else {
+            // Direct connection
+            let credentials = match self.build_credentials(id) {
+                Ok(c) => c,
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    let tunnel = self.tunnels.get_mut(id).unwrap();
+                    tunnel.status = TunnelStatus::Disconnected;
+                    tunnel.error_message = Some(error_msg);
+                    self.emit_status(id, &TunnelStatus::Disconnected);
+                    return Err(e);
+                }
+            };
+
+            let (host, port, user) = {
+                let tunnel = self.tunnels.get(id).unwrap();
+                (tunnel.config.host.clone(), tunnel.config.port, tunnel.config.user.clone())
+            };
+
+            match SshConnection::connect(&host, port, &user, credentials, timeout_secs).await {
+                Ok(conn) => Arc::new(conn),
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    let tunnel = self.tunnels.get_mut(id).unwrap();
+                    tunnel.status = TunnelStatus::Disconnected;
+                    tunnel.error_message = Some(error_msg);
+                    tunnel.ki_slot = None;
+                    self.emit_status(id, &TunnelStatus::Disconnected);
+                    return Err(e);
+                }
             }
         };
 
@@ -392,6 +608,10 @@ impl TunnelManagerActor {
             if let Some(ssh) = tunnel.ssh_connection.take() {
                 ssh.disconnect().await;
             }
+            if let Some(jump_ssh) = tunnel.jump_connection.take() {
+                jump_ssh.disconnect().await;
+            }
+            tunnel.ki_slot = None;
             tunnel.status = TunnelStatus::Disconnected;
             tunnel.error_message = None;
         }
@@ -434,6 +654,10 @@ impl TunnelManagerActor {
             if let Some(ssh) = tunnel.ssh_connection.take() {
                 ssh.disconnect().await;
             }
+            if let Some(jump_ssh) = tunnel.jump_connection.take() {
+                jump_ssh.disconnect().await;
+            }
+            tunnel.ki_slot = None;
             tunnel.status = TunnelStatus::Disconnected;
         }
         self.emit_status(id, &TunnelStatus::Disconnected);
@@ -446,7 +670,7 @@ impl TunnelManagerActor {
             ));
         }
         let state = TunnelState::new(config);
-        let info = state.to_info();
+        let info = self.tunnel_to_info(&state);
         self.tunnels.insert(info.id.clone(), state);
         info!("Added tunnel '{}'", info.id);
         Ok(info)
@@ -467,7 +691,7 @@ impl TunnelManagerActor {
 
         // Replace with new config, reset state
         let state = TunnelState::new(config);
-        let info = state.to_info();
+        let info = self.tunnel_to_info(&state);
         self.tunnels.insert(id.clone(), state);
         self.emit_status(&id, &TunnelStatus::Disconnected);
         info!("Updated tunnel '{}'", id);
@@ -482,6 +706,33 @@ impl TunnelManagerActor {
                 self.handle_disconnect(id).await.ok();
             }
         }
+
+        // Find tunnels that use this one as a jump host and disconnect them
+        let dependent_ids: Vec<String> = self.tunnels.iter()
+            .filter(|(tid, t)| {
+                *tid != id && t.config.jump_host.as_deref() == Some(id)
+            })
+            .map(|(tid, _)| tid.clone())
+            .collect();
+
+        for dep_id in &dependent_ids {
+            if let Some(t) = self.tunnels.get(dep_id) {
+                if t.status == TunnelStatus::Connected || t.status == TunnelStatus::Connecting {
+                    info!("Disconnecting dependent tunnel '{}' before removing jump host '{}'", dep_id, id);
+                    self.handle_disconnect(dep_id).await.ok();
+                }
+            }
+        }
+
+        // Clear dangling jump_host references
+        for dep_id in &dependent_ids {
+            if let Some(t) = self.tunnels.get_mut(dep_id) {
+                t.config.jump_host = None;
+            }
+        }
+
+        // Delete password from keyring
+        keychain::delete_password(id);
 
         match self.tunnels.remove(id) {
             Some(_) => {
@@ -617,7 +868,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_tunnels_returns_all() {
-        let handle = spawn_manager(test_config(), None, None);
+        let handle = spawn_manager(test_config(), None, None, None);
         let (reply_tx, reply_rx) = oneshot::channel();
         handle
             .send(ManagerCommand::ListTunnels { reply: reply_tx })
@@ -631,7 +882,7 @@ mod tests {
 
     #[tokio::test]
     async fn connect_unknown_tunnel_returns_error() {
-        let handle = spawn_manager(test_config(), None, None);
+        let handle = spawn_manager(test_config(), None, None, None);
 
         let (reply_tx, reply_rx) = oneshot::channel();
         handle
@@ -647,7 +898,7 @@ mod tests {
 
     #[tokio::test]
     async fn reload_config_adds_new_tunnels() {
-        let handle = spawn_manager(test_config(), None, None);
+        let handle = spawn_manager(test_config(), None, None, None);
 
         let mut new_config = test_config();
         new_config.tunnels.push(TunnelConfig {
@@ -693,7 +944,7 @@ mod tests {
         config.tunnels[0].host = "192.0.2.1".into(); // RFC 5737 TEST-NET, should be unreachable
         config.settings.connection_timeout_secs = 2;
 
-        let handle = spawn_manager(config, None, None);
+        let handle = spawn_manager(config, None, None, None);
 
         let (reply_tx, reply_rx) = oneshot::channel();
         handle
