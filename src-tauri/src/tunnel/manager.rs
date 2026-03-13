@@ -94,6 +94,8 @@ impl TunnelState {
             remote_host: self.config.remote_host.clone(),
             remote_port: self.config.remote_port,
             error_message: self.error_message.clone(),
+            auth_method: self.config.auth_method.clone(),  // NEW
+            jump_host_name: None,                          // NEW (placeholder until Task 6)
         }
     }
 }
@@ -569,7 +571,7 @@ impl TunnelManagerActor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Settings, TunnelType};
+    use crate::types::{AuthMethod, Settings, TunnelType};
 
     fn test_config() -> AppConfig {
         AppConfig {
@@ -581,12 +583,14 @@ mod tests {
                     host: "example.com".into(),
                     port: 22,
                     user: "user".into(),
+                    auth_method: AuthMethod::Key,
                     key_path: "~/.ssh/id_rsa".into(),
                     tunnel_type: TunnelType::Local,
                     local_port: 5432,
                     remote_host: "db.internal".into(),
                     remote_port: 5432,
                     auto_connect: false,
+                    jump_host: None,
                 },
                 TunnelConfig {
                     id: "redis".into(),
@@ -594,12 +598,14 @@ mod tests {
                     host: "example.com".into(),
                     port: 22,
                     user: "user".into(),
+                    auth_method: AuthMethod::Key,
                     key_path: "~/.ssh/id_rsa".into(),
                     tunnel_type: TunnelType::Local,
                     local_port: 6379,
                     remote_host: "redis.internal".into(),
                     remote_port: 6379,
                     auto_connect: false,
+                    jump_host: None,
                 },
             ],
             settings: Settings::default(),
@@ -647,12 +653,14 @@ mod tests {
             host: "example.com".into(),
             port: 22,
             user: "user".into(),
+            auth_method: AuthMethod::Key,
             key_path: "~/.ssh/id_rsa".into(),
             tunnel_type: TunnelType::Local,
             local_port: 8080,
             remote_host: "web.internal".into(),
             remote_port: 80,
             auto_connect: false,
+            jump_host: None,
         });
 
         let (reply_tx, reply_rx) = oneshot::channel();

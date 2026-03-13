@@ -312,7 +312,7 @@ mod tests {
         assert_eq!(reloaded.tunnels[0].name, "Modified");
     }
 
-    use crate::types::TunnelInput;
+    use crate::types::{AuthMethod, TunnelInput};
 
     #[test]
     fn validate_input_valid() {
@@ -322,10 +322,12 @@ mod tests {
             port: 22,
             user: "user".to_string(),
             key_path: "".to_string(),
+            auth_method: AuthMethod::Key,
             local_port: 5432,
             remote_host: "db.internal".to_string(),
             remote_port: 5432,
             auto_connect: false,
+            jump_host: None,
         };
         assert!(validate_tunnel_input(&input, &[], None).is_ok());
     }
@@ -338,10 +340,12 @@ mod tests {
             port: 22,
             user: "user".to_string(),
             key_path: "".to_string(),
+            auth_method: AuthMethod::Password,
             local_port: 5432,
             remote_host: "db.internal".to_string(),
             remote_port: 5432,
             auto_connect: false,
+            jump_host: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("name"));
@@ -355,10 +359,12 @@ mod tests {
             port: 22,
             user: "user".to_string(),
             key_path: "".to_string(),
+            auth_method: AuthMethod::Password,
             local_port: 5432,
             remote_host: "db.internal".to_string(),
             remote_port: 5432,
             auto_connect: false,
+            jump_host: None,
         };
         let existing = vec![("other".to_string(), 5432u16)];
         let err = validate_tunnel_input(&input, &existing, None).unwrap_err();
@@ -373,10 +379,12 @@ mod tests {
             port: 22,
             user: "user".to_string(),
             key_path: "".to_string(),
+            auth_method: AuthMethod::Password,
             local_port: 5432,
             remote_host: "db.internal".to_string(),
             remote_port: 5432,
             auto_connect: false,
+            jump_host: None,
         };
         let existing = vec![("self-id".to_string(), 5432u16)];
         assert!(validate_tunnel_input(&input, &existing, Some("self-id")).is_ok());
@@ -390,10 +398,12 @@ mod tests {
             port: 22,
             user: "user".to_string(),
             key_path: "".to_string(),
+            auth_method: AuthMethod::Password,
             local_port: 0,
             remote_host: "db.internal".to_string(),
             remote_port: 5432,
             auto_connect: false,
+            jump_host: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("localPort"));

@@ -20,6 +20,16 @@ pub enum TunnelStatus {
     Disconnecting,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum AuthMethod {
+    #[default]
+    Key,
+    Password,
+    Agent,
+    KeyboardInteractive,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TunnelConfig {
@@ -28,6 +38,8 @@ pub struct TunnelConfig {
     pub host: String,
     pub port: u16,
     pub user: String,
+    #[serde(default)]
+    pub auth_method: AuthMethod,
     pub key_path: String,
     #[serde(rename = "type")]
     pub tunnel_type: TunnelType,
@@ -36,6 +48,8 @@ pub struct TunnelConfig {
     pub remote_port: u16,
     #[serde(default)]
     pub auto_connect: bool,
+    #[serde(default)]
+    pub jump_host: Option<String>,
 }
 
 /// Input for creating/updating a tunnel — no id field
@@ -49,11 +63,15 @@ pub struct TunnelInput {
     pub user: String,
     #[serde(default)]
     pub key_path: String,
+    #[serde(default)]
+    pub auth_method: AuthMethod,
     pub local_port: u16,
     pub remote_host: String,
     pub remote_port: u16,
     #[serde(default)]
     pub auto_connect: bool,
+    #[serde(default)]
+    pub jump_host: Option<String>,
 }
 
 fn default_ssh_port() -> u16 { 22 }
@@ -66,12 +84,14 @@ impl TunnelInput {
             host: self.host,
             port: self.port,
             user: self.user,
+            auth_method: self.auth_method,
             key_path: self.key_path,
             tunnel_type: TunnelType::Local,
             local_port: self.local_port,
             remote_host: self.remote_host,
             remote_port: self.remote_port,
             auto_connect: self.auto_connect,
+            jump_host: self.jump_host,
         }
     }
 }
@@ -121,6 +141,8 @@ pub struct TunnelInfo {
     pub remote_host: String,
     pub remote_port: u16,
     pub error_message: Option<String>,
+    pub auth_method: AuthMethod,
+    pub jump_host_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -173,15 +195,30 @@ mod tests {
             port: 22,
             user: "user".to_string(),
             key_path: "".to_string(),
+            auth_method: AuthMethod::Key,
             local_port: 5432,
             remote_host: "db.internal".to_string(),
             remote_port: 5432,
             auto_connect: false,
+            jump_host: None,
         };
         let config = input.to_config("test".to_string());
         assert_eq!(config.id, "test");
         assert_eq!(config.tunnel_type, TunnelType::Local);
         assert_eq!(config.name, "Test");
+    }
+
+    #[test]
+    fn auth_method_serializes_kebab_case() {
+        let m = AuthMethod::KeyboardInteractive;
+        let json = serde_json::to_string(&m).unwrap();
+        assert_eq!(json, "\"keyboard-interactive\"");
+    }
+
+    #[test]
+    fn auth_method_default_is_key() {
+        let m = AuthMethod::default();
+        assert_eq!(m, AuthMethod::Key);
     }
 
     #[test]
