@@ -39,6 +39,11 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
           <div className="text-xs text-[#999] dark:text-[#555] truncate" style={{ fontFamily: "var(--font-mono)" }}>
             :{tunnel.localPort} &rarr; {tunnel.remoteHost}:{tunnel.remotePort}
           </div>
+          {tunnel.jumpHostName && (
+            <div className="text-xs text-[#999] dark:text-[#555] truncate">
+              via {tunnel.jumpHostName}
+            </div>
+          )}
           {tunnel.errorMessage && (
             <div className="text-xs text-[#dc2626] dark:text-[#f87171] mt-0.5 max-h-10 overflow-y-auto break-words" style={{ fontFamily: "var(--font-mono)" }}>
               {tunnel.errorMessage}
