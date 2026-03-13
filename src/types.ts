@@ -5,6 +5,8 @@ export type TunnelStatus =
   | "error"
   | "disconnecting";
 
+export type AuthMethod = "key" | "password" | "agent" | "keyboard-interactive";
+
 export interface TunnelInfo {
   id: string;
   name: string;
@@ -13,6 +15,8 @@ export interface TunnelInfo {
   remoteHost: string;
   remotePort: number;
   errorMessage: string | null;
+  authMethod: AuthMethod;
+  jumpHostName: string | null;
 }
 
 export interface TunnelStatusEvent {
@@ -27,10 +31,12 @@ export interface TunnelInput {
   port: number;
   user: string;
   keyPath: string;
+  authMethod: AuthMethod;
   localPort: number;
   remoteHost: string;
   remotePort: number;
   autoConnect: boolean;
+  jumpHost: string | null;
 }
 
 export interface TunnelConfig {
@@ -40,9 +46,11 @@ export interface TunnelConfig {
   port: number;
   user: string;
   keyPath: string;
+  authMethod: AuthMethod;
   type: "local" | "reverse" | "dynamic";
   localPort: number;
   remoteHost: string;
   remotePort: number;
   autoConnect: boolean;
+  jumpHost: string | null;
 }
