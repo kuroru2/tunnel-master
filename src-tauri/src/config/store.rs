@@ -152,8 +152,13 @@ pub fn validate_tunnel_input(
         }
     }
 
-    // Validate keyPath if provided
-    if !input.key_path.is_empty() {
+    // Validate keyPath only for Key auth
+    if input.auth_method == crate::types::AuthMethod::Key {
+        if input.key_path.is_empty() {
+            return Err(TunnelError::ConfigInvalid(
+                "Key path is required for key authentication".to_string(),
+            ));
+        }
         let expanded = ConfigStore::expand_tilde(&input.key_path);
         if !expanded.exists() {
             return Err(TunnelError::ConfigInvalid(
@@ -322,7 +327,7 @@ mod tests {
             port: 22,
             user: "user".to_string(),
             key_path: "".to_string(),
-            auth_method: AuthMethod::Key,
+            auth_method: AuthMethod::Password,
             local_port: 5432,
             remote_host: "db.internal".to_string(),
             remote_port: 5432,
@@ -330,6 +335,25 @@ mod tests {
             jump_host: None,
         };
         assert!(validate_tunnel_input(&input, &[], None).is_ok());
+    }
+
+    #[test]
+    fn validate_input_key_auth_requires_key_path() {
+        let input = TunnelInput {
+            name: "Test".to_string(),
+            host: "example.com".to_string(),
+            port: 22,
+            user: "user".to_string(),
+            key_path: "".to_string(),
+            auth_method: AuthMethod::Key,
+            local_port: 5432,
+            remote_host: "db.internal".to_string(),
+            remote_port: 5432,
+            auto_connect: false,
+            jump_host: None,
+        };
+        let err = validate_tunnel_input(&input, &[], None).unwrap_err();
+        assert!(err.to_string().contains("Key path is required"));
     }
 
     #[test]
