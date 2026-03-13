@@ -203,6 +203,12 @@ pub async fn delete_tunnel(
     let store = state.config_store.lock().unwrap();
     let mut app_config = store.load().map_err(|e| e.to_string())?;
     app_config.tunnels.retain(|t| t.id != id);
+    // Clear dangling jump host references on disk
+    for tunnel in &mut app_config.tunnels {
+        if tunnel.jump_host.as_deref() == Some(id.as_str()) {
+            tunnel.jump_host = None;
+        }
+    }
     store.save(&app_config).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -249,4 +255,54 @@ pub async fn pick_key_file() -> Result<Option<String>, String> {
     .await
     .map_err(|e| format!("Dialog error: {}", e))?;
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn store_password_for_tunnel(
+    id: String,
+    password: String,
+) -> Result<(), String> {
+    crate::keychain::store_password(&id, &password)
+}
+
+#[tauri::command]
+pub async fn respond_keyboard_interactive(
+    id: String,
+    responses: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+    state
+        .manager
+        .send(ManagerCommand::RespondKeyboardInteractive {
+            id,
+            responses,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|e| format!("Manager unavailable: {}", e))?;
+    reply_rx
+        .await
+        .map_err(|e| format!("Manager response error: {}", e))?
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn cancel_keyboard_interactive(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+    state
+        .manager
+        .send(ManagerCommand::CancelKeyboardInteractive {
+            id,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|e| format!("Manager unavailable: {}", e))?;
+    reply_rx
+        .await
+        .map_err(|e| format!("Manager response error: {}", e))?
+        .map_err(|e| e.to_string())
 }
