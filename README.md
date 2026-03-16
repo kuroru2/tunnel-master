@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src-tauri/icons/icon.png" width="128" alt="Tunnel Master icon" />
+</p>
+
 # Tunnel Master
 
 A lightweight SSH tunnel manager that lives in your system tray. Create, manage, and monitor SSH port-forwarding tunnels without touching the terminal.
@@ -61,7 +65,7 @@ npx tauri dev
 cd src-tauri && cargo test
 
 # TypeScript check
-npx tsc --noEmit
+npx tsc -b
 
 # Lint
 npm run lint

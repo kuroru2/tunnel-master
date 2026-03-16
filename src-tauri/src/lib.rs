@@ -189,8 +189,12 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit Tunnel Master", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
 
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+                .expect("failed to load tray icon");
+
             let _tray = TrayIconBuilder::with_id("main")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tray_icon)
+                .icon_as_template(true)
                 .tooltip("Tunnel Master — no active tunnels")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
