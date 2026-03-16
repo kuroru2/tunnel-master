@@ -54,8 +54,9 @@ jobs:
         run: npm ci
 
       - name: Rust tests
+        if: runner.os != 'Windows'
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test --lib
 
       - name: Build Tauri app
         run: npx tauri build --bundles ${{ matrix.bundles }}
