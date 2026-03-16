@@ -37,6 +37,7 @@ function App() {
     addTunnel,
     updateTunnel,
     deleteTunnel,
+    reorderTunnels,
     getTunnelConfig,
   } = useTunnels();
 
@@ -59,6 +60,7 @@ function App() {
         onEdit={(id) => setView({ kind: "edit-form", tunnelId: id })}
         onAdd={() => setView({ kind: "edit-form", tunnelId: null })}
         onDelete={deleteTunnel}
+        onReorder={reorderTunnels}
         onDone={() => setView({ kind: "normal" })}
       />
     );

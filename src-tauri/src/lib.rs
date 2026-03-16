@@ -301,6 +301,7 @@ pub fn run() {
             commands::update_tunnel,
             commands::delete_tunnel,
             commands::get_tunnel_config,
+            commands::reorder_tunnels,
             commands::quit_app,
             commands::accept_host_key,
             commands::pick_key_file,

@@ -215,6 +215,32 @@ pub async fn delete_tunnel(
 }
 
 #[tauri::command]
+pub async fn reorder_tunnels(
+    ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Update manager order
+    let (reply_tx, reply_rx) = oneshot::channel();
+    state.manager.send(ManagerCommand::ReorderTunnels { ids: ids.clone(), reply: reply_tx })
+        .await.map_err(|e| format!("Manager unavailable: {}", e))?;
+    reply_rx.await.map_err(|e| format!("Manager error: {}", e))?.map_err(|e| e.to_string())?;
+
+    // Persist order to config on disk
+    let store = state.config_store.lock().unwrap();
+    let mut app_config = store.load().map_err(|e| e.to_string())?;
+    let mut reordered = Vec::with_capacity(ids.len());
+    for id in &ids {
+        if let Some(pos) = app_config.tunnels.iter().position(|t| t.id == *id) {
+            reordered.push(app_config.tunnels[pos].clone());
+        }
+    }
+    app_config.tunnels = reordered;
+    store.save(&app_config).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_tunnel_config(
     id: String,
     state: State<'_, AppState>,

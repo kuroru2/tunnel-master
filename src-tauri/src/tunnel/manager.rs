@@ -64,6 +64,10 @@ pub enum ManagerCommand {
         id: String,
         reply: oneshot::Sender<Result<(), TunnelError>>,
     },
+    ReorderTunnels {
+        ids: Vec<String>,
+        reply: oneshot::Sender<Result<(), TunnelError>>,
+    },
     Shutdown {
         reply: oneshot::Sender<()>,
     },
@@ -123,6 +127,8 @@ pub fn spawn_manager(
 
 struct TunnelManagerActor {
     tunnels: HashMap<String, TunnelState>,
+    /// Tracks tunnel IDs in display order (config array order)
+    tunnel_order: Vec<String>,
     event_tx: Option<mpsc::UnboundedSender<TunnelStatusEvent>>,
     error_tx: Option<mpsc::UnboundedSender<crate::types::TunnelErrorEvent>>,
     manager_tx: mpsc::Sender<ManagerCommand>,
@@ -139,12 +145,15 @@ impl TunnelManagerActor {
         app_handle: Option<tauri::AppHandle>,
     ) -> Self {
         let mut tunnels = HashMap::new();
+        let mut tunnel_order = Vec::new();
         for tc in config.tunnels {
+            tunnel_order.push(tc.id.clone());
             tunnels.insert(tc.id.clone(), TunnelState::new(tc));
         }
 
         Self {
             tunnels,
+            tunnel_order,
             event_tx,
             error_tx,
             manager_tx,
@@ -310,8 +319,9 @@ impl TunnelManagerActor {
         while let Some(cmd) = rx.recv().await {
             match cmd {
                 ManagerCommand::ListTunnels { reply } => {
-                    let infos: Vec<TunnelInfo> =
-                        self.tunnels.values().map(|t| self.tunnel_to_info(t)).collect();
+                    let infos: Vec<TunnelInfo> = self.tunnel_order.iter()
+                        .filter_map(|id| self.tunnels.get(id).map(|t| self.tunnel_to_info(t)))
+                        .collect();
                     let _ = reply.send(infos);
                 }
 
@@ -372,6 +382,11 @@ impl TunnelManagerActor {
 
                 ManagerCommand::CancelKeyboardInteractive { id, reply } => {
                     let result = self.handle_cancel_ki(&id);
+                    let _ = reply.send(result);
+                }
+
+                ManagerCommand::ReorderTunnels { ids, reply } => {
+                    let result = self.handle_reorder(ids);
                     let _ = reply.send(result);
                 }
 
@@ -671,6 +686,7 @@ impl TunnelManagerActor {
         }
         let state = TunnelState::new(config);
         let info = self.tunnel_to_info(&state);
+        self.tunnel_order.push(info.id.clone());
         self.tunnels.insert(info.id.clone(), state);
         info!("Added tunnel '{}'", info.id);
         Ok(info)
@@ -736,6 +752,7 @@ impl TunnelManagerActor {
 
         match self.tunnels.remove(id) {
             Some(_) => {
+                self.tunnel_order.retain(|i| i != id);
                 info!("Removed tunnel '{}'", id);
                 Ok(())
             }
@@ -776,7 +793,8 @@ impl TunnelManagerActor {
             info!("Removed tunnel '{}' during reload", id);
         }
 
-        // Add new tunnels, update existing ones (but don't touch connected tunnels' state)
+        // Rebuild order from config array and add/update tunnels
+        self.tunnel_order = config.tunnels.iter().map(|tc| tc.id.clone()).collect();
         for tc in config.tunnels {
             if let Some(existing) = self.tunnels.get_mut(&tc.id) {
                 existing.config = tc;
@@ -786,6 +804,23 @@ impl TunnelManagerActor {
         }
 
         info!("Config reloaded, {} tunnels configured", self.tunnels.len());
+        Ok(())
+    }
+
+    fn handle_reorder(&mut self, ids: Vec<String>) -> Result<(), TunnelError> {
+        // Validate: all IDs must exist and the set must match exactly
+        if ids.len() != self.tunnels.len() {
+            return Err(TunnelError::ConfigInvalid(
+                "Reorder list must contain all tunnel IDs".to_string(),
+            ));
+        }
+        for id in &ids {
+            if !self.tunnels.contains_key(id) {
+                return Err(TunnelError::TunnelNotFound(id.clone()));
+            }
+        }
+        self.tunnel_order = ids;
+        info!("Tunnels reordered");
         Ok(())
     }
 

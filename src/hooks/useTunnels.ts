@@ -242,6 +242,17 @@ export function useTunnels() {
     }
   }, [fetchTunnels]);
 
+  const reorderTunnels = useCallback(async (ids: string[]) => {
+    try {
+      setError(null);
+      await invoke("reorder_tunnels", { ids });
+      await fetchTunnels();
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  }, [fetchTunnels]);
+
   const getTunnelConfig = useCallback(async (id: string): Promise<TunnelConfig> => {
     return await invoke<TunnelConfig>("get_tunnel_config", { id });
   }, []);
@@ -268,6 +279,7 @@ export function useTunnels() {
     addTunnel,
     updateTunnel,
     deleteTunnel,
+    reorderTunnels,
     getTunnelConfig,
   };
 }
