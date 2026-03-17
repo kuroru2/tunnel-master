@@ -10,6 +10,7 @@ use crate::keychain;
 use crate::tunnel::connection::{AuthCredentials, KiResponseSlot, SshConnection};
 use crate::tunnel::forwarder::PortForwarder;
 use crate::tunnel::health::HealthMonitor;
+use crate::tunnel::traffic::{self, TrafficCounters, TrafficHistory, TrafficSample};
 use crate::types::{AppConfig, AuthMethod, TunnelConfig, TunnelInfo, TunnelStatus, TunnelStatusEvent};
 
 /// Messages the TunnelManager actor receives
@@ -68,6 +69,10 @@ pub enum ManagerCommand {
         ids: Vec<String>,
         reply: oneshot::Sender<Result<(), TunnelError>>,
     },
+    GetTrafficHistory {
+        id: String,
+        reply: oneshot::Sender<Result<Vec<TrafficSample>, TunnelError>>,
+    },
     Shutdown {
         reply: oneshot::Sender<()>,
     },
@@ -88,6 +93,10 @@ struct TunnelState {
     ki_slot: Option<KiResponseSlot>,
     /// Generation counter to detect stale TunnelDied messages
     generation: u64,
+    /// Traffic byte counters, shared with PortForwarder
+    traffic_counters: Option<Arc<TrafficCounters>>,
+    /// Ring buffer of traffic samples (last 60 seconds)
+    traffic_history: TrafficHistory,
 }
 
 impl TunnelState {
@@ -101,6 +110,8 @@ impl TunnelState {
             jump_connection: None,
             ki_slot: None,
             generation: 0,
+            traffic_counters: None,
+            traffic_history: traffic::new_traffic_history(),
         }
     }
 }
@@ -391,6 +402,17 @@ impl TunnelManagerActor {
                     let _ = reply.send(result);
                 }
 
+                ManagerCommand::GetTrafficHistory { id, reply } => {
+                    let result = match self.tunnels.get(&id) {
+                        Some(tunnel) => {
+                            let buf = tunnel.traffic_history.lock().unwrap();
+                            Ok(buf.iter().cloned().collect())
+                        }
+                        None => Err(TunnelError::TunnelNotFound(id)),
+                    };
+                    let _ = reply.send(result);
+                }
+
                 ManagerCommand::Shutdown { reply } => {
                     info!("TunnelManager received shutdown command");
                     self.disconnect_all().await;
@@ -546,11 +568,15 @@ impl TunnelManagerActor {
             }
         });
 
+        // Create traffic counters
+        let traffic_counters = Arc::new(TrafficCounters::new());
+
         // Spawn port forwarder
         let fwd_ssh = ssh.clone();
         let fwd_death_tx = death_tx.clone();
         let fwd_remote_host = remote_host.clone();
         let fwd_tunnel_id = id.to_string();
+        let fwd_counters = Some(traffic_counters.clone());
         let forwarder_handle = tokio::spawn(async move {
             if let Err(e) = PortForwarder::start(
                 fwd_ssh,
@@ -559,7 +585,7 @@ impl TunnelManagerActor {
                 remote_port,
                 fwd_death_tx.clone(),
                 fwd_tunnel_id,
-                None,
+                fwd_counters,
             )
             .await
             {
@@ -583,6 +609,28 @@ impl TunnelManagerActor {
             .await;
         });
 
+        // Spawn traffic sampler (only if we have an app handle for emitting events)
+        let sampler_abort = if let Some(sampler_app_handle) = self.app_handle.clone() {
+            let sampler_counters = traffic_counters.clone();
+            let sampler_history = {
+                let tunnel = self.tunnels.get(id).unwrap();
+                tunnel.traffic_history.clone()
+            };
+            let sampler_tunnel_id = id.to_string();
+            let sampler_handle = tokio::spawn(async move {
+                traffic::TrafficSampler::run(
+                    sampler_tunnel_id,
+                    sampler_counters,
+                    sampler_history,
+                    sampler_app_handle,
+                )
+                .await;
+            });
+            Some(sampler_handle.abort_handle())
+        } else {
+            None
+        };
+
         // Store state — abort all previous tasks and track new ones
         {
             let tunnel = self.tunnels.get_mut(id).unwrap();
@@ -595,6 +643,10 @@ impl TunnelManagerActor {
             tunnel.abort_handles.push(death_handle.abort_handle());
             tunnel.ssh_connection = Some(ssh);
             tunnel.status = TunnelStatus::Connected;
+            if let Some(abort) = sampler_abort {
+                tunnel.abort_handles.push(abort);
+            }
+            tunnel.traffic_counters = Some(traffic_counters);
         }
         self.emit_status(id, &TunnelStatus::Connected);
 
@@ -629,6 +681,8 @@ impl TunnelManagerActor {
                 jump_ssh.disconnect().await;
             }
             tunnel.ki_slot = None;
+            tunnel.traffic_counters = None;
+            tunnel.traffic_history.lock().unwrap().clear();
             tunnel.status = TunnelStatus::Disconnected;
             tunnel.error_message = None;
         }
@@ -675,6 +729,8 @@ impl TunnelManagerActor {
                 jump_ssh.disconnect().await;
             }
             tunnel.ki_slot = None;
+            tunnel.traffic_counters = None;
+            tunnel.traffic_history.lock().unwrap().clear();
             tunnel.status = TunnelStatus::Disconnected;
         }
         self.emit_status(id, &TunnelStatus::Disconnected);

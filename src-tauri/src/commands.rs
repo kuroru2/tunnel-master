@@ -7,6 +7,7 @@ use crate::config::store::{generate_id, validate_tunnel_input, ConfigStore};
 use crate::keychain;
 use crate::tunnel::connection::accept_pending_host_key;
 use crate::tunnel::manager::{ManagerCommand, ManagerHandle};
+use crate::tunnel::traffic::TrafficSample;
 use crate::types::{TunnelConfig, TunnelInfo, TunnelInput};
 
 pub struct AppState {
@@ -327,6 +328,27 @@ pub async fn cancel_keyboard_interactive(
         })
         .await
         .map_err(|e| format!("Manager unavailable: {}", e))?;
+    reply_rx
+        .await
+        .map_err(|e| format!("Manager response error: {}", e))?
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_traffic_history(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TrafficSample>, String> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+    state
+        .manager
+        .send(ManagerCommand::GetTrafficHistory {
+            id,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|e| format!("Manager unavailable: {}", e))?;
+
     reply_rx
         .await
         .map_err(|e| format!("Manager response error: {}", e))?

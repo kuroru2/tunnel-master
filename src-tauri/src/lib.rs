@@ -308,6 +308,7 @@ pub fn run() {
             commands::store_password_for_tunnel,
             commands::respond_keyboard_interactive,
             commands::cancel_keyboard_interactive,
+            commands::get_traffic_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
