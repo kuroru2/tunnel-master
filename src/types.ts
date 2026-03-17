@@ -17,6 +17,7 @@ export interface TunnelInfo {
   errorMessage: string | null;
   authMethod: AuthMethod;
   jumpHostName: string | null;
+  showTrafficChart: boolean;
 }
 
 export interface TunnelStatusEvent {
@@ -37,6 +38,7 @@ export interface TunnelInput {
   remotePort: number;
   autoConnect: boolean;
   jumpHost: string | null;
+  showTrafficChart: boolean;
 }
 
 export interface TunnelConfig {
@@ -53,4 +55,17 @@ export interface TunnelConfig {
   remotePort: number;
   autoConnect: boolean;
   jumpHost: string | null;
+  showTrafficChart: boolean;
+}
+
+export interface TrafficSample {
+  bytesIn: number;
+  bytesOut: number;
+  timestamp: number;
+}
+
+export interface TrafficEvent {
+  id: string;
+  bytesIn: number;
+  bytesOut: number;
 }
