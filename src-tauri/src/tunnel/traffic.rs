@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use tokio::sync::mpsc;
 use tracing::debug;
 
 /// Shared atomic counters incremented by the PortForwarder on every copy.

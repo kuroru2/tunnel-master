@@ -121,6 +121,7 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
 
   // Format bytes/s for display
   const formatRate = (bytes: number): string => {
+    if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB/s`;
     if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB/s`;
     if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB/s`;
     return `${bytes} B/s`;
