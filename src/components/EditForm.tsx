@@ -15,7 +15,7 @@ const emptyForm: TunnelInput = {
   name: "", host: "", port: 22, user: "", keyPath: "",
   authMethod: "key",
   localPort: 0, remoteHost: "", remotePort: 0, autoConnect: false,
-  jumpHost: null, showTrafficChart: false,
+  jumpHost: null, showTrafficChart: true,
 };
 
 export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }: EditFormProps) {
@@ -40,7 +40,7 @@ export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }:
             remotePort: config.remotePort,
             autoConnect: config.autoConnect,
             jumpHost: config.jumpHost,
-            showTrafficChart: config.showTrafficChart,
+            showTrafficChart: config.showTrafficChart ?? true,
           });
         })
         .catch((e) => setError(String(e)))
@@ -228,6 +228,23 @@ export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }:
               <div
                 className={`w-[14px] h-[14px] rounded-full absolute top-[2px] transition-transform ${
                   form.autoConnect
+                    ? "translate-x-[14px] bg-white"
+                    : "translate-x-[2px] bg-white dark:bg-[#888]"
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2.5 border-t border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.04)]">
+            <span className="text-sm text-[#999] dark:text-[#999]">Traffic Chart</span>
+            <button
+              onClick={() => updateField("showTrafficChart", !form.showTrafficChart)}
+              className={`w-8 h-[18px] rounded-full relative transition-colors ${
+                form.showTrafficChart ? "bg-[#4ade80]" : "bg-[#ccc] dark:bg-[#333]"
+              }`}
+            >
+              <div
+                className={`w-[14px] h-[14px] rounded-full absolute top-[2px] transition-transform ${
+                  form.showTrafficChart
                     ? "translate-x-[14px] bg-white"
                     : "translate-x-[2px] bg-white dark:bg-[#888]"
                 }`}
