@@ -177,6 +177,7 @@ impl TunnelManagerActor {
             error_message: tunnel.error_message.clone(),
             auth_method: tunnel.config.auth_method.clone(),
             jump_host_name,
+            show_traffic_chart: tunnel.config.show_traffic_chart,
         }
     }
 
@@ -881,6 +882,7 @@ mod tests {
                     remote_port: 5432,
                     auto_connect: false,
                     jump_host: None,
+                    show_traffic_chart: true,
                 },
                 TunnelConfig {
                     id: "redis".into(),
@@ -896,6 +898,7 @@ mod tests {
                     remote_port: 6379,
                     auto_connect: false,
                     jump_host: None,
+                    show_traffic_chart: true,
                 },
             ],
             settings: Settings::default(),
@@ -951,6 +954,7 @@ mod tests {
             remote_port: 80,
             auto_connect: false,
             jump_host: None,
+            show_traffic_chart: true,
         });
 
         let (reply_tx, reply_rx) = oneshot::channel();
