@@ -8,10 +8,15 @@ A lightweight SSH tunnel manager that lives in your system tray. Create, manage,
 
 Built with [Tauri v2](https://v2.tauri.app), Rust, React, and Tailwind CSS.
 
+<p align="center">
+  <img src="docs/imgs/app_screenshot.png" width="480" alt="Tunnel Master — tunnels with real-time traffic sparklines" />
+</p>
+
 ## Features
 
 - **System tray app** — runs in the background, click the tray icon to open
 - **One-click connect/disconnect** — start and stop tunnels instantly
+- **Real-time traffic monitor** — per-tunnel sparkline charts with download/upload rates
 - **In-app config editor** — add, edit, and delete tunnels from the UI
 - **Native file picker** — browse for SSH key files
 - **Passphrase support** — stores SSH key passphrases in macOS Keychain
@@ -118,7 +123,8 @@ src-tauri/src/
 ├── tunnel/
 │   ├── manager.rs      # Actor-based tunnel lifecycle management
 │   ├── connection.rs   # SSH connection via russh
-│   ├── forwarder.rs    # TCP port forwarding
+│   ├── forwarder.rs    # TCP port forwarding with byte counting
+│   ├── traffic.rs      # Traffic counters, sampler, and sparkline data
 │   └── health.rs       # Keepalive health monitoring
 ├── keychain.rs         # Passphrase storage (macOS Keychain)
 ├── errors.rs           # Error types
@@ -130,6 +136,7 @@ src/
 │   ├── TunnelList.tsx  # Main tunnel list with connect/disconnect
 │   ├── EditList.tsx    # Edit mode with two-step delete
 │   ├── EditForm.tsx    # Grouped form for add/edit tunnel
+│   ├── TrafficSparkline.tsx  # SVG sparkline for traffic visualization
 │   └── PassphraseDialog.tsx
 ├── hooks/useTunnels.ts # React hook for tunnel state and CRUD
 └── types.ts            # TypeScript type definitions

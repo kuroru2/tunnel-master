@@ -6,8 +6,8 @@ if [ -f /home/testuser/.ssh/authorized_keys ]; then
     chmod 600 /home/testuser/.ssh/authorized_keys
 fi
 
-# Start HTTP traffic server on port 80 (for port-forward testing)
-python3 /usr/local/bin/traffic-server.py &
+# Start HTTP traffic servers on multiple ports (simulating various services)
+python3 /usr/local/bin/traffic-server.py 5432 6379 8080 3000 9200 9090 &
 
 # Start sshd in foreground
 exec /usr/sbin/sshd -D -e
