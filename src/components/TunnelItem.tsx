@@ -1,5 +1,8 @@
 import { useRef, useState, useEffect } from "react";
-import type { TunnelInfo, TunnelStatus } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import type { TunnelInfo, TunnelStatus, TrafficSample, TrafficEvent } from "../types";
+import { TrafficSparkline } from "./TrafficSparkline";
 
 interface TunnelItemProps {
   tunnel: TunnelInfo;
@@ -81,9 +84,56 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
     }
   };
 
+  // -- Traffic monitoring --
+  const [trafficSamples, setTrafficSamples] = useState<TrafficSample[]>([]);
+  const showChart = tunnel.showTrafficChart;
+
+  // Fetch history when tunnel is connected and chart is enabled
+  useEffect(() => {
+    if (tunnel.status !== "connected" || !showChart) {
+      setTimeout(() => setTrafficSamples([]), 0);
+      return;
+    }
+    invoke<TrafficSample[]>("get_traffic_history", { id: tunnel.id })
+      .then(setTrafficSamples)
+      .catch(() => {}); // ignore errors
+  }, [tunnel.id, tunnel.status, showChart]);
+
+  // Listen for real-time traffic events
+  useEffect(() => {
+    if (tunnel.status !== "connected" || !showChart) return;
+
+    const unlisten = listen<TrafficEvent>("tunnel-traffic", (event) => {
+      if (event.payload.id !== tunnel.id) return;
+      const sample: TrafficSample = {
+        bytesIn: event.payload.bytesIn,
+        bytesOut: event.payload.bytesOut,
+        timestamp: Date.now(),
+      };
+      setTrafficSamples((prev) => {
+        const next = [...prev, sample];
+        return next.length > 60 ? next.slice(-60) : next;
+      });
+    });
+
+    return () => { unlisten.then((fn) => fn()); };
+  }, [tunnel.id, tunnel.status, showChart]);
+
+  // Format bytes/s for display
+  const formatRate = (bytes: number): string => {
+    if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB/s`;
+    if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB/s`;
+    return `${bytes} B/s`;
+  };
+
+  const lastSample = trafficSamples.length > 0 ? trafficSamples[trafficSamples.length - 1] : null;
+  const isIdle = lastSample ? lastSample.bytesIn + lastSample.bytesOut < 10 : true;
+  const showTraffic = showChart && tunnel.status === "connected" && trafficSamples.length > 0;
+
   return (
-    <div className="flex items-center justify-between px-3 py-2.5 hover:bg-[rgba(0,0,0,0.03)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded-lg transition-colors">
-      <div className="flex items-center gap-3 min-w-0">
+    <div className="relative overflow-hidden flex items-center justify-between px-3 py-2.5 hover:bg-[rgba(0,0,0,0.03)] dark:hover:bg-[rgba(255,255,255,0.04)] rounded-lg transition-colors">
+      {showTraffic && <TrafficSparkline samples={trafficSamples} />}
+      <div className="flex items-center gap-3 min-w-0 z-10">
         <div
           className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[tunnel.status]}`}
           style={isConnected ? { boxShadow: "var(--glow-green)" } : undefined}
@@ -101,6 +151,19 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
         </div>
       </div>
 
+      {showTraffic && (
+        <div className="shrink-0 ml-auto text-right z-10" style={{ fontFamily: "var(--font-mono)" }}>
+          {isIdle ? (
+            <div className="text-[10px] text-[#6b7280]">idle</div>
+          ) : (
+            <>
+              <div className="text-[10px] text-[#4ade80]">↓ {formatRate(lastSample!.bytesIn)}</div>
+              <div className="text-[10px] text-[#60a5fa]">↑ {formatRate(lastSample!.bytesOut)}</div>
+            </>
+          )}
+        </div>
+      )}
+
       {tunnel.errorMessage && (
         <div className="shrink-0 ml-auto text-[#ef4444]" title={tunnel.errorMessage}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
@@ -112,7 +175,7 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
       <button
         onClick={handleToggle}
         disabled={visuallyBusy || recentlyFailed}
-        className={`shrink-0 ml-3 w-7 h-4 rounded-full relative transition-colors ${
+        className={`shrink-0 ml-3 w-7 h-4 rounded-full relative transition-colors z-10 ${
           visuallyBusy || recentlyFailed ? "cursor-not-allowed" : "cursor-pointer"
         } ${
           recentlyFailed
