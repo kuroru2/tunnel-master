@@ -54,6 +54,60 @@ pub struct TrafficEvent {
     pub bytes_out: u64,
 }
 
+/// Samples traffic counters every 1 second, stores in history, emits Tauri event.
+pub struct TrafficSampler;
+
+impl TrafficSampler {
+    pub async fn run(
+        tunnel_id: String,
+        counters: Arc<TrafficCounters>,
+        history: TrafficHistory,
+        app_handle: tauri::AppHandle,
+    ) {
+        use tauri::Emitter;
+
+        let interval = std::time::Duration::from_secs(1);
+
+        loop {
+            tokio::time::sleep(interval).await;
+
+            let (bytes_in, bytes_out) = counters.take();
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+
+            let sample = TrafficSample {
+                bytes_in,
+                bytes_out,
+                timestamp,
+            };
+
+            // Push to ring buffer
+            {
+                let mut buf = history.lock().unwrap();
+                if buf.len() >= 60 {
+                    buf.pop_front();
+                }
+                buf.push_back(sample.clone());
+            }
+
+            // Emit event to frontend
+            let event = TrafficEvent {
+                id: tunnel_id.clone(),
+                bytes_in,
+                bytes_out,
+            };
+            let _ = app_handle.emit("tunnel-traffic", &event);
+
+            debug!(
+                "Traffic sample for {}: in={} out={}",
+                tunnel_id, bytes_in, bytes_out
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

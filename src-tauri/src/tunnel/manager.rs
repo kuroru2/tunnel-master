@@ -558,6 +558,7 @@ impl TunnelManagerActor {
                 remote_port,
                 fwd_death_tx.clone(),
                 fwd_tunnel_id,
+                None,
             )
             .await
             {
