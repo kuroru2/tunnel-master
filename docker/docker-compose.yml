@@ -1,0 +1,16 @@
+services:
+  test-ssh:
+    build: ./test-ssh
+    container_name: tunnel-master-test-ssh
+    ports:
+      - "2222:22"
+    volumes:
+      - test-ssh-keys:/home/testuser/.ssh
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "22"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  test-ssh-keys:
