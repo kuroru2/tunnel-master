@@ -15,7 +15,7 @@ const emptyForm: TunnelInput = {
   name: "", host: "", port: 22, user: "", keyPath: "",
   authMethod: "key",
   localPort: 0, remoteHost: "", remotePort: 0, autoConnect: false,
-  jumpHost: null,
+  jumpHost: null, showTrafficChart: false,
 };
 
 export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }: EditFormProps) {
@@ -40,6 +40,7 @@ export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }:
             remotePort: config.remotePort,
             autoConnect: config.autoConnect,
             jumpHost: config.jumpHost,
+            showTrafficChart: config.showTrafficChart,
           });
         })
         .catch((e) => setError(String(e)))
