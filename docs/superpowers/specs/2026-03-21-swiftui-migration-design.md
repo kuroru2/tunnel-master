@@ -274,6 +274,17 @@ A `build.sh` script will wrap steps 1-2 for convenience.
 - Update GitHub Release workflow
 - Bump version to v1.0
 
+## Known Risks & Mitigations
+
+| Risk | Level | Mitigation |
+|------|-------|------------|
+| **Threading deadlock** — UniFFI foreign callbacks are synchronous. If Swift's callback handler synchronously calls back into Rust on the same thread, re-entrancy deadlock. | High | Rust must always fire callbacks from background tokio tasks (already the case — manager actor loop, traffic sampler). Swift must use `Task { @MainActor in ... }` immediately in every callback method to avoid blocking the Rust thread. Never do synchronous Rust calls inside a callback. |
+| **Granular UI updates** — Replacing the entire `tunnels` array on every state change can reset scroll position or lose focus in EditFormView. | Medium | `TunnelInfo` conforms to `Identifiable`. `onTunnelStateChanged` updates only the specific element in the array by `id`, not the whole list. Never call `list_tunnels()` from inside a callback — use the delta. |
+| **Keychain migration** — The SwiftUI binary has a different executable identity than the Tauri binary. macOS Keychain items created by Tauri may not be accessible. Both apps are unsigned, but executable identity still differs. | Medium | Accept that users re-enter credentials once after migration. Document this in release notes. The `keyring` crate with service name `"tunnel-master"` may or may not carry over — test during Phase 3. |
+| **TunnelCore lifecycle** — `MenuBarExtra` views can be recreated by the system. Multiple `TunnelCore` instances would bind the same SSH ports. | Medium | `TunnelViewModel` must be created once at the `App` level via `@State`. Use two-phase init (create `TunnelCore` in a separate `start()` method, not in `init()`) to avoid Swift's self-before-init restriction. |
+| **App Sandbox default** — New Xcode projects enable App Sandbox by default. Rust's `std::fs` cannot read SSH key paths inside a sandbox without `startAccessingSecurityScopedResource()`. | Low | Disable App Sandbox in Xcode "Signing & Capabilities" tab. We distribute unsigned via GitHub Releases — no sandbox needed. |
+| **Sparkline performance** — Many tunnels emitting traffic callbacks could cause stutter. | Low | Already mitigated: traffic sampler runs at 1Hz. Even 20 tunnels = 20 callbacks/second, trivial for SwiftUI Canvas. No throttling changes needed. |
+
 ## References
 
 - [Ockam Portals: Swift + Rust architecture](https://dev.to/build-trust/how-we-built-a-swift-app-that-uses-rust-102f)
