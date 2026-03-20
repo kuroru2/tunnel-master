@@ -92,6 +92,8 @@ TunnelCore (Rust)
 
 `TunnelCore` is the single entry point. Created at app startup with the event handler.
 
+`TunnelCore` owns the `ConfigStore` internally — all CRUD operations persist to disk within the Rust layer. Swift never interacts with config files directly.
+
 ```rust
 #[derive(uniffi::Object)]
 pub struct TunnelCore { /* ... */ }
@@ -101,32 +103,59 @@ impl TunnelCore {
     #[uniffi::constructor]
     fn new(event_handler: Arc<dyn TunnelEventHandler>) -> Self;
 
+    // Tunnel state
     fn list_tunnels(&self) -> Vec<TunnelInfo>;
     fn connect(&self, id: String);
     fn disconnect(&self, id: String);
+
+    // Config CRUD (persists to disk internally)
+    fn get_tunnel_config(&self, id: String) -> Option<TunnelConfig>;
     fn add_tunnel(&self, config: TunnelConfig);
     fn update_tunnel(&self, id: String, config: TunnelConfig);
     fn delete_tunnel(&self, id: String);
     fn reorder_tunnels(&self, ids: Vec<String>);
+    fn reload_config(&self);
+
+    // Traffic
     fn get_traffic_history(&self, id: String) -> Vec<TrafficSample>;
+
+    // Auth responses
     fn accept_host_key(&self, id: String, fingerprint: String);
     fn submit_passphrase(&self, id: String, passphrase: String);
     fn submit_password(&self, id: String, password: String);
+    fn respond_keyboard_interactive(&self, id: String, responses: Vec<String>);
     fn cancel_auth(&self, id: String);
+
+    // Keychain
+    fn store_passphrase(&self, id: String, passphrase: String);
+    fn store_password(&self, id: String, password: String);
+    fn clear_credential(&self, id: String);
+
+    // Lifecycle — disconnects all tunnels, cleans up. App exit is Swift's responsibility.
     fn shutdown(&self);
 }
 ```
 
+**Note:** File picker (`pick_key_file`) is handled entirely on the Swift side via `NSOpenPanel`. The selected path is passed to `add_tunnel`/`update_tunnel` in the `TunnelConfig`.
+
 ### Event Trait (`events.rs`)
 
 ```rust
+#[derive(uniffi::Record)]
+pub struct KiPromptEntry {
+    pub text: String,
+    pub echo: bool,
+}
+
 #[uniffi::export(with_foreign)]
 pub trait TunnelEventHandler: Send + Sync {
     fn on_tunnel_state_changed(&self, id: String, state: TunnelState);
     fn on_passphrase_requested(&self, id: String, key_path: String);
     fn on_password_requested(&self, id: String);
     fn on_host_key_verification(&self, id: String, fingerprint: String, key_type: String);
-    fn on_keyboard_interactive(&self, id: String, prompt: String);
+    fn on_keyboard_interactive(
+        &self, id: String, name: String, instructions: String, prompts: Vec<KiPromptEntry>
+    );
     fn on_traffic_update(&self, id: String, sample: TrafficSample);
     fn on_error(&self, id: String, message: String);
 }
@@ -145,6 +174,12 @@ Three modules need changes:
 | `tunnel/traffic.rs` | `tauri::AppHandle` + `tauri::Emitter` for traffic events | `Arc<dyn TunnelEventHandler>` callbacks |
 
 Two modules stay Tauri-only (not extracted): `commands.rs`, `lib.rs`.
+
+### Platform-Specific Notes
+
+- **Shutdown:** `TunnelCore::shutdown()` only disconnects tunnels and cleans up resources. App termination is handled by SwiftUI / `NSApplication.terminate`. The current Tauri code calls `std::process::exit(0)` — that moves to the Swift side.
+- **Tray tooltip:** Connected tunnel count logic (currently in Tauri `lib.rs`) moves to the SwiftUI ViewModel. The ViewModel computes the count from its `tunnels` array and updates the `MenuBarExtra` label.
+- **File picker:** `pick_key_file` becomes a Swift-side `NSOpenPanel` call. No Rust involvement.
 
 ## SwiftUI Views
 
