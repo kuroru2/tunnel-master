@@ -214,8 +214,6 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
         onClick={handleToggle}
         disabled={visuallyBusy || recentlyFailed}
         className={`shrink-0 ml-3 w-7 h-4 rounded-full relative transition-colors z-10 ${
-          errorExpanded ? "self-start mt-1 " : ""
-        }${
           visuallyBusy || recentlyFailed ? "cursor-not-allowed" : "cursor-pointer"
         } ${
           recentlyFailed
