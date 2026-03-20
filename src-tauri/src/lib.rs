@@ -62,10 +62,20 @@ fn setup_macos_panel(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
         let handler = TunnelPanelHandler::new();
         let app_handle_for_handler = app.handle().clone();
         handler.window_did_resign_key(move |_notification| {
-            tracing::debug!("Panel resigned key window — hiding");
-            if let Ok(p) = app_handle_for_handler.get_webview_panel("main") {
-                p.hide();
-            }
+            tracing::debug!("Panel resigned key window — scheduling delayed hide");
+            let handle = app_handle_for_handler.clone();
+            // Delay the hide to filter out transient focus changes (e.g.
+            // hovering over the menu bar in full screen). If the user
+            // interacts with the panel again within 150ms, it regains key
+            // status and resign_key won't re-fire, so the panel stays open.
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                if let Ok(p) = handle.get_webview_panel("main") {
+                    if p.is_visible() {
+                        p.hide();
+                    }
+                }
+            });
         });
         panel.set_event_handler(Some(handler.as_ref()));
 
