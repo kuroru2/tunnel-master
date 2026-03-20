@@ -103,6 +103,15 @@ export function useTunnels() {
         const tunnelId = errMsg.substring("PASSWORD_REQUIRED:".length);
         const name = tunnels.find((t) => t.id === tunnelId)?.name ?? tunnelId;
         setPasswordPrompt({ tunnelId, tunnelName: name });
+      } else if (errMsg.startsWith("Authentication failed")) {
+        const tunnel = tunnels.find((t) => t.id === id);
+        if (tunnel?.authMethod === "password") {
+          // Stale password in keychain (e.g. admin changed it) — clear and re-prompt
+          await invoke("clear_password_for_tunnel", { id }).catch(() => {});
+          setPasswordPrompt({ tunnelId: id, tunnelName: tunnel.name, isRetry: true });
+        } else {
+          setError(errMsg);
+        }
       } else {
         setError(errMsg);
       }
