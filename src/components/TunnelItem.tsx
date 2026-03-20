@@ -88,8 +88,10 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
 
   // Reset error expand state when the error message changes
   useEffect(() => {
-    setErrorExpanded(false);
-    setCopied(false);
+    setTimeout(() => {
+      setErrorExpanded(false);
+      setCopied(false);
+    }, 0);
   }, [tunnel.errorMessage]);
 
   const handleCopy = () => {
@@ -157,13 +159,42 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
         />
         <div className="min-w-0">
           <div className="text-sm font-medium truncate">{tunnel.name}</div>
-          <div className="text-xs text-[#999] dark:text-[#555] truncate" style={{ fontFamily: "var(--font-mono)" }}>
-            :{tunnel.localPort} &rarr; {tunnel.remoteHost}:{tunnel.remotePort}
-          </div>
-          {tunnel.jumpHostName && (
-            <div className="text-xs text-[#999] dark:text-[#555] truncate">
-              via {tunnel.jumpHostName}
+          {tunnel.errorMessage ? (
+            <div
+              className={`text-xs text-[#dc2626] dark:text-[#f87171] cursor-pointer ${
+                errorExpanded ? "leading-relaxed [overflow-wrap:anywhere] select-text" : "truncate"
+              }`}
+              style={{ fontFamily: "var(--font-mono)" }}
+              role="button"
+              aria-expanded={errorExpanded}
+              onClick={() => setErrorExpanded(!errorExpanded)}
+            >
+              {tunnel.errorMessage}
+              {errorExpanded && (
+                <div className="mt-1.5 select-none">
+                  <button
+                    className="text-[10px] px-1.5 py-0.5 border border-current rounded opacity-40 hover:opacity-70"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy();
+                    }}
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              <div className="text-xs text-[#999] dark:text-[#555] truncate" style={{ fontFamily: "var(--font-mono)" }}>
+                :{tunnel.localPort} &rarr; {tunnel.remoteHost}:{tunnel.remotePort}
+              </div>
+              {tunnel.jumpHostName && (
+                <div className="text-xs text-[#999] dark:text-[#555] truncate">
+                  via {tunnel.jumpHostName}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -181,18 +212,12 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
         </div>
       )}
 
-      {tunnel.errorMessage && (
-        <div className="shrink-0 ml-auto text-[#ef4444]" title={tunnel.errorMessage}>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
-          </svg>
-        </div>
-      )}
-
       <button
         onClick={handleToggle}
         disabled={visuallyBusy || recentlyFailed}
         className={`shrink-0 ml-3 w-7 h-4 rounded-full relative transition-colors z-10 ${
+          errorExpanded ? "self-start mt-1 " : ""
+        }${
           visuallyBusy || recentlyFailed ? "cursor-not-allowed" : "cursor-pointer"
         } ${
           recentlyFailed
