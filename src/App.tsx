@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { TunnelList } from "./components/TunnelList";
 import { PassphraseDialog } from "./components/PassphraseDialog";
 import { HostKeyDialog } from "./components/HostKeyDialog";
@@ -42,6 +43,11 @@ function App() {
   } = useTunnels();
 
   const [view, setView] = useState<View>({ kind: "normal" });
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
 
   const handleSave = async (input: TunnelInput, id: string | null) => {
     if (id) {
@@ -127,10 +133,13 @@ function App() {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.06)] px-4 py-2">
+      <div className="flex items-center justify-between border-t border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.06)] px-4 py-2">
+        {appVersion && (
+          <span className="text-xs text-[#bbb] dark:text-[#444]">v{appVersion}</span>
+        )}
         <button
           onClick={() => invoke("quit_app")}
-          className="text-xs text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999]"
+          className="text-xs text-[#999] dark:text-[#666] hover:text-[#666] dark:hover:text-[#999] ml-auto"
         >
           Quit Tunnel Master
         </button>
