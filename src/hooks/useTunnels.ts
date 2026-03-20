@@ -134,13 +134,18 @@ export function useTunnels() {
   const submitPassword = useCallback(
     async (password: string) => {
       if (!passwordPrompt) return;
-      const { tunnelId } = passwordPrompt;
+      const { tunnelId, tunnelName } = passwordPrompt;
       setPasswordPrompt(null);
       try {
         await invoke("store_password_for_tunnel", { id: tunnelId, password });
         await invoke("connect_tunnel", { id: tunnelId });
       } catch (e) {
-        setError(String(e));
+        const errMsg = String(e);
+        if (errMsg.startsWith("PASSWORD_REQUIRED:") || errMsg.startsWith("Authentication failed")) {
+          setPasswordPrompt({ tunnelId, tunnelName });
+        } else {
+          setError(errMsg);
+        }
       }
     },
     [passwordPrompt]

@@ -152,6 +152,9 @@ export function EditForm({ tunnelId, tunnels, getTunnelConfig, onSave, onBack }:
                 value={form.keyPath}
                 onChange={(e) => updateField("keyPath", e.target.value)}
                 placeholder="~/.ssh/id_rsa"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 className="flex-1 bg-transparent text-sm outline-none placeholder-[#bbb] dark:placeholder-[#555]"
                 style={{ fontFamily: "var(--font-mono)" }}
               />
@@ -283,6 +286,9 @@ function FormRow({ label, value, onChange, type = "text", placeholder, mono }: F
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
         className="flex-1 bg-transparent text-sm outline-none placeholder-[#bbb] dark:placeholder-[#555]"
         style={mono ? { fontFamily: "var(--font-mono)" } : undefined}
       />
