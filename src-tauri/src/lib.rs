@@ -63,6 +63,10 @@ fn setup_macos_panel(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
         let app_handle_for_handler = app.handle().clone();
         handler.window_did_resign_key(move |_notification| {
             tracing::debug!("Panel resigned key window — hiding");
+            // Un-highlight the tray icon and release menu bar when panel loses focus
+            if let Some(tray) = app_handle_for_handler.tray_by_id("main") {
+                set_tray_highlighted(&tray, false);
+            }
             if let Ok(p) = app_handle_for_handler.get_webview_panel("main") {
                 p.hide();
             }
@@ -81,10 +85,26 @@ fn setup_macos_panel(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
 // ── Tray icon click handler (macOS — uses NSPanel) ──────────────────
 
 #[cfg(target_os = "macos")]
+/// Set the tray icon's highlighted state via NSStatusBarButton.
+fn set_tray_highlighted(tray: &tauri::tray::TrayIcon, highlighted: bool) {
+    let _ = tray.with_inner_tray_icon(move |inner| {
+        if let Some(status_item) = inner.ns_status_item() {
+            unsafe {
+                let mtm = tauri_nspanel::objc2::MainThreadMarker::new_unchecked();
+                if let Some(button) = status_item.button(mtm) {
+                    let _: () = tauri_nspanel::objc2::msg_send![&*button, setHighlighted: highlighted];
+                }
+            }
+        }
+    });
+}
+
+
 fn handle_tray_click(tray: &tauri::tray::TrayIcon, rect: tauri::Rect) {
     let app = tray.app_handle();
     if let Ok(panel) = app.get_webview_panel("main") {
         if panel.is_visible() {
+            set_tray_highlighted(tray, false);
             panel.hide();
         } else {
             if let Some(window) = app.get_webview_window("main") {
@@ -107,6 +127,7 @@ fn handle_tray_click(tray: &tauri::tray::TrayIcon, rect: tauri::Rect) {
                 let y = icon_y + icon_h;
                 let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
             }
+            set_tray_highlighted(tray, true);
             panel.order_front_regardless();
             panel.show_and_make_key();
         }
