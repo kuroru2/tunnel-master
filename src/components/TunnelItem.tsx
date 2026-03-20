@@ -28,6 +28,8 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
   const minVisTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [recentlyFailed, setRecentlyFailed] = useState(false);
   const [showConnecting, setShowConnecting] = useState(false);
+  const [errorExpanded, setErrorExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const prev = prevStatusRef.current;
@@ -82,6 +84,20 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
     } else {
       onConnect(tunnel.id);
     }
+  };
+
+  // Reset error expand state when the error message changes
+  useEffect(() => {
+    setErrorExpanded(false);
+    setCopied(false);
+  }, [tunnel.errorMessage]);
+
+  const handleCopy = () => {
+    if (!tunnel.errorMessage || !navigator.clipboard) return;
+    navigator.clipboard.writeText(tunnel.errorMessage).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
   };
 
   // -- Traffic monitoring --
