@@ -120,7 +120,7 @@ impl TunnelCore {
     fn get_traffic_history(&self, id: String) -> Vec<TrafficSample>;
 
     // Auth responses
-    fn accept_host_key(&self, id: String, fingerprint: String);
+    fn accept_host_key(&self, host: String, port: u16);
     fn submit_passphrase(&self, id: String, passphrase: String);
     fn submit_password(&self, id: String, password: String);
     fn respond_keyboard_interactive(&self, id: String, responses: Vec<String>);
@@ -149,10 +149,10 @@ pub struct KiPromptEntry {
 
 #[uniffi::export(with_foreign)]
 pub trait TunnelEventHandler: Send + Sync {
-    fn on_tunnel_state_changed(&self, id: String, state: TunnelState);
+    fn on_tunnel_state_changed(&self, id: String, status: TunnelStatus, error_message: Option<String>);
     fn on_passphrase_requested(&self, id: String, key_path: String);
     fn on_password_requested(&self, id: String);
-    fn on_host_key_verification(&self, id: String, fingerprint: String, key_type: String);
+    fn on_host_key_verification(&self, id: String, host: String, port: u16, key_type: String, fingerprint: String);
     fn on_keyboard_interactive(
         &self, id: String, name: String, instructions: String, prompts: Vec<KiPromptEntry>
     );
