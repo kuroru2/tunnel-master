@@ -306,6 +306,7 @@ pub fn run() {
             commands::accept_host_key,
             commands::pick_key_file,
             commands::store_password_for_tunnel,
+            commands::clear_password_for_tunnel,
             commands::respond_keyboard_interactive,
             commands::cancel_keyboard_interactive,
             commands::get_traffic_history,

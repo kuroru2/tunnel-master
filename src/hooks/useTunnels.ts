@@ -22,6 +22,7 @@ export function useTunnels() {
   const [passwordPrompt, setPasswordPrompt] = useState<{
     tunnelId: string;
     tunnelName: string;
+    isRetry?: boolean;
   } | null>(null);
   const [kiPrompt, setKiPrompt] = useState<{
     tunnelId: string;
@@ -141,8 +142,10 @@ export function useTunnels() {
         await invoke("connect_tunnel", { id: tunnelId });
       } catch (e) {
         const errMsg = String(e);
+        // Clear the bad password from keychain so it doesn't persist across restarts
+        await invoke("clear_password_for_tunnel", { id: tunnelId }).catch(() => {});
         if (errMsg.startsWith("PASSWORD_REQUIRED:") || errMsg.startsWith("Authentication failed")) {
-          setPasswordPrompt({ tunnelId, tunnelName });
+          setPasswordPrompt({ tunnelId, tunnelName, isRetry: true });
         } else {
           setError(errMsg);
         }
@@ -152,8 +155,11 @@ export function useTunnels() {
   );
 
   const cancelPassword = useCallback(() => {
+    if (passwordPrompt) {
+      invoke("clear_password_for_tunnel", { id: passwordPrompt.tunnelId }).catch(() => {});
+    }
     setPasswordPrompt(null);
-  }, []);
+  }, [passwordPrompt]);
 
   const acceptHostKey = useCallback(async () => {
     if (!hostKeyPrompt) return;

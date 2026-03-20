@@ -160,7 +160,7 @@ function App() {
 
       {/* Password dialog */}
       {passwordPrompt && (
-        <PasswordDialog tunnelName={passwordPrompt.tunnelName} onSubmit={submitPassword} onCancel={cancelPassword} />
+        <PasswordDialog tunnelName={passwordPrompt.tunnelName} isRetry={passwordPrompt.isRetry} onSubmit={submitPassword} onCancel={cancelPassword} />
       )}
 
       {/* Keyboard-interactive dialog */}

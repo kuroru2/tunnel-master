@@ -293,6 +293,11 @@ pub async fn store_password_for_tunnel(
 }
 
 #[tauri::command]
+pub async fn clear_password_for_tunnel(id: String) {
+    crate::keychain::delete_password(&id);
+}
+
+#[tauri::command]
 pub async fn respond_keyboard_interactive(
     id: String,
     responses: Vec<String>,
