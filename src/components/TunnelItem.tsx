@@ -88,10 +88,8 @@ export function TunnelItem({ tunnel, onConnect, onDisconnect }: TunnelItemProps)
 
   // Reset error expand state when the error message changes
   useEffect(() => {
-    setTimeout(() => {
-      setErrorExpanded(false);
-      setCopied(false);
-    }, 0);
+    setErrorExpanded(false);
+    setCopied(false);
   }, [tunnel.errorMessage]);
 
   const handleCopy = () => {
