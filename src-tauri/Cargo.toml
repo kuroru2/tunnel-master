@@ -27,6 +27,7 @@ dirs = "5"
 thiserror = "2"
 async-trait = "0.1"
 rfd = "0.17.2"
+tunnel-core = { path = "../rust-core" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

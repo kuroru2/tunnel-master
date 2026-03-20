@@ -1,14 +1,14 @@
-mod config;
 mod commands;
-mod errors;
-mod keychain;
-mod tunnel;
-pub mod types;
+
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use commands::AppState;
-use config::store::ConfigStore;
-use tunnel::manager::{spawn_manager, ManagerCommand};
-use types::{TunnelStatus, TunnelStatusEvent};
+use tunnel_core::config::store::ConfigStore;
+use tunnel_core::events::KiPromptEntry;
+use tunnel_core::tunnel::manager::{spawn_manager, ManagerCommand};
+use tunnel_core::types::{AppConfig, Settings, TrafficSample, TunnelStatus};
+use tunnel_core::TunnelEventHandler;
 
 use tauri::{
     menu::{Menu, MenuItem},
@@ -16,6 +16,101 @@ use tauri::{
     Emitter,
     Manager,
 };
+
+// ── Tauri-specific event types ───────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TunnelStatusEvent {
+    id: String,
+    status: TunnelStatus,
+    timestamp: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct TunnelErrorEvent {
+    id: String,
+    message: String,
+}
+
+// ── TauriEventHandler — bridges tunnel_core events to Tauri ─────────
+
+struct TauriEventHandler {
+    app_handle: tauri::AppHandle,
+}
+
+impl TauriEventHandler {
+    fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
+    }
+}
+
+impl TunnelEventHandler for TauriEventHandler {
+    fn on_tunnel_state_changed(&self, id: String, status: TunnelStatus, _error_message: Option<String>) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let event = TunnelStatusEvent { id, status, timestamp };
+        let _ = self.app_handle.emit("tunnel-status-changed", &event);
+    }
+
+    fn on_passphrase_requested(&self, id: String, key_path: String) {
+        let _ = self.app_handle.emit("passphrase-requested", serde_json::json!({
+            "id": id,
+            "keyPath": key_path,
+        }));
+    }
+
+    fn on_password_requested(&self, id: String) {
+        let _ = self.app_handle.emit("password-requested", serde_json::json!({
+            "id": id,
+        }));
+    }
+
+    fn on_host_key_verification(&self, id: String, host: String, port: u16, key_type: String, fingerprint: String) {
+        let _ = self.app_handle.emit("host-key-verification", serde_json::json!({
+            "id": id,
+            "host": host,
+            "port": port,
+            "keyType": key_type,
+            "fingerprint": fingerprint,
+        }));
+    }
+
+    fn on_keyboard_interactive(
+        &self,
+        id: String,
+        name: String,
+        instructions: String,
+        prompts: Vec<KiPromptEntry>,
+    ) {
+        let prompts_json: Vec<serde_json::Value> = prompts.iter().map(|p| serde_json::json!({
+            "text": p.text,
+            "echo": p.echo,
+        })).collect();
+        let _ = self.app_handle.emit("keyboard-interactive", serde_json::json!({
+            "id": id,
+            "name": name,
+            "instructions": instructions,
+            "prompts": prompts_json,
+        }));
+    }
+
+    fn on_traffic_update(&self, id: String, sample: TrafficSample) {
+        let _ = self.app_handle.emit("traffic-update", serde_json::json!({
+            "id": id,
+            "bytesIn": sample.bytes_in,
+            "bytesOut": sample.bytes_out,
+            "timestamp": sample.timestamp,
+        }));
+    }
+
+    fn on_error(&self, id: String, message: String) {
+        let event = TunnelErrorEvent { id, message };
+        let _ = self.app_handle.emit("tunnel-error", &event);
+    }
+}
 
 // ── macOS: NSPanel imports and setup ────────────────────────────────
 
@@ -190,10 +285,10 @@ pub fn run() {
     let config_store = ConfigStore::new(ConfigStore::default_path());
     let config = config_store.load().unwrap_or_else(|e| {
         tracing::warn!("Could not load config: {}. Starting with empty config.", e);
-        types::AppConfig {
+        AppConfig {
             version: 1,
             tunnels: vec![],
-            settings: types::Settings::default(),
+            settings: Settings::default(),
         }
     });
 
@@ -237,20 +332,19 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<TunnelStatusEvent>();
-            let (error_tx, mut error_rx) = tokio::sync::mpsc::unbounded_channel::<types::TunnelErrorEvent>();
-            let app_handle_for_manager = app.handle().clone();
-            let manager = spawn_manager(config, Some(event_tx), Some(error_tx), Some(app_handle_for_manager));
+            let event_handler = Arc::new(TauriEventHandler::new(app.handle().clone()));
+            let manager = spawn_manager(config, event_handler);
 
-            let app_handle = app.handle().clone();
-            let manager_for_events = manager.clone();
+            // Periodically update tray tooltip based on tunnel states
+            let tray_app_handle = app.handle().clone();
+            let tray_manager = manager.clone();
             tauri::async_runtime::spawn(async move {
-                while let Some(event) = event_rx.recv().await {
-                    let _ = app_handle.emit("tunnel-status-changed", &event);
-
-                    if let Some(tray) = app_handle.tray_by_id("main") {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+                loop {
+                    interval.tick().await;
+                    if let Some(tray) = tray_app_handle.tray_by_id("main") {
                         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-                        if manager_for_events
+                        if tray_manager
                             .send(ManagerCommand::ListTunnels { reply: reply_tx })
                             .await
                             .is_ok()
@@ -272,13 +366,6 @@ pub fn run() {
                             }
                         }
                     }
-                }
-            });
-
-            let app_handle2 = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                while let Some(event) = error_rx.recv().await {
-                    let _ = app_handle2.emit("tunnel-error", &event);
                 }
             });
 

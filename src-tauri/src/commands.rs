@@ -3,12 +3,11 @@ use std::sync::Mutex;
 use tauri::State;
 use tokio::sync::oneshot;
 
-use crate::config::store::{generate_id, validate_tunnel_input, ConfigStore};
-use crate::keychain;
-use crate::tunnel::connection::accept_pending_host_key;
-use crate::tunnel::manager::{ManagerCommand, ManagerHandle};
-use crate::tunnel::traffic::TrafficSample;
-use crate::types::{TunnelConfig, TunnelInfo, TunnelInput};
+use tunnel_core::config::store::{generate_id, validate_tunnel_input, ConfigStore};
+use tunnel_core::keychain;
+use tunnel_core::tunnel::connection::accept_pending_host_key;
+use tunnel_core::tunnel::manager::{ManagerCommand, ManagerHandle};
+use tunnel_core::types::{TrafficSample, TunnelConfig, TunnelInfo, TunnelInput};
 
 pub struct AppState {
     pub manager: ManagerHandle,
@@ -289,12 +288,12 @@ pub async fn store_password_for_tunnel(
     id: String,
     password: String,
 ) -> Result<(), String> {
-    crate::keychain::store_password(&id, &password)
+    tunnel_core::keychain::store_password(&id, &password)
 }
 
 #[tauri::command]
 pub async fn clear_password_for_tunnel(id: String) {
-    crate::keychain::delete_password(&id);
+    tunnel_core::keychain::delete_password(&id);
 }
 
 #[tauri::command]
