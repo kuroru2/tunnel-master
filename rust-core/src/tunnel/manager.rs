@@ -454,7 +454,7 @@ impl TunnelManagerActor {
     }
 
     /// Schedule a reconnect attempt with exponential backoff.
-    fn schedule_reconnect(&self, id: &str) {
+    fn schedule_reconnect(&mut self, id: &str) {
         let tunnel = match self.tunnels.get(id) {
             Some(t) if t.was_connected => t,
             _ => return,
@@ -462,6 +462,13 @@ impl TunnelManagerActor {
         let attempts = tunnel.reconnect_attempts;
         let delay_secs = std::cmp::min(2u64.saturating_pow(attempts), 60);
         info!("Scheduling reconnect for {} in {}s (attempt {})", id, delay_secs, attempts + 1);
+
+        // Show reconnect status immediately during the wait
+        {
+            let tunnel = self.tunnels.get_mut(id).unwrap();
+            tunnel.error_message = Some(format!("Reconnecting in {}s (attempt {})...", delay_secs, attempts + 1));
+        }
+        self.emit_status(id, &TunnelStatus::Connecting);
 
         let manager_tx = self.manager_tx.clone();
         let tunnel_id = id.to_string();
