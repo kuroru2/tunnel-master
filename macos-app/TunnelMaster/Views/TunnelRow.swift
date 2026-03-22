@@ -27,15 +27,14 @@ struct TunnelRow: View {
                         .lineLimit(1)
                     if let msg = tunnel.errorMessage, !msg.isEmpty {
                         HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.triangle.fill")
+                            Image(systemName: tunnel.status == .connecting ? "arrow.trianglehead.2.counterclockwise" : "exclamationmark.triangle.fill")
                                 .font(.caption2)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(tunnel.status == .connecting ? .yellow : .orange)
                             Text(msg)
                                 .font(.caption2)
-                                .foregroundStyle(.red)
+                                .foregroundColor(tunnel.status == .connecting ? .secondary : .red)
                                 .lineLimit(2)
                         }
-                        .frame(height: 24, alignment: .topLeading)
                     }
                 }
 
@@ -75,14 +74,15 @@ struct TunnelRow: View {
     }
 
     private var statusColor: Color {
-        if tunnel.errorMessage != nil && !tunnel.errorMessage!.isEmpty {
-            return .red
-        }
         switch tunnel.status {
         case .connected: return .green
         case .connecting, .disconnecting: return .yellow
         case .error: return .red
-        case .disconnected: return .gray
+        case .disconnected:
+            if tunnel.errorMessage != nil && !tunnel.errorMessage!.isEmpty {
+                return .red
+            }
+            return .gray
         }
     }
 }
