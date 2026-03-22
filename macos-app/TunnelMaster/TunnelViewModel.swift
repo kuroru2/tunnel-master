@@ -1,5 +1,26 @@
 import Foundation
 import Observation
+import os.log
+
+private let logger = Logger(subsystem: "com.kuroru2.tunnel-master", category: "ViewModel")
+
+private func tmLog(_ msg: String) {
+    logger.info("\(msg)")
+    // Also write to file for debugging
+    let logFile = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".tunnel-master/swiftui.log")
+    let line = "\(Date()): \(msg)\n"
+    if let data = line.data(using: .utf8) {
+        if FileManager.default.fileExists(atPath: logFile.path) {
+            if let handle = try? FileHandle(forWritingTo: logFile) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            }
+        } else {
+            try? data.write(to: logFile)
+        }
+    }
+}
 
 @Observable
 final class TunnelViewModel: TunnelEventHandler {
@@ -27,11 +48,14 @@ final class TunnelViewModel: TunnelEventHandler {
     }
 
     func start() {
+        tmLog("[TM] start() called, core is \(core == nil ? "nil" : "set")")
         guard core == nil else {
             refreshTunnels()
             return
         }
+        tmLog("[TM] Creating TunnelCore...")
         core = TunnelCore(eventHandler: self)
+        tmLog("[TM] TunnelCore created, refreshing tunnels")
         refreshTunnels()
     }
 
@@ -45,6 +69,7 @@ final class TunnelViewModel: TunnelEventHandler {
     func refreshTunnels() {
         guard let core else { return }
         let list = core.listTunnels()
+        tmLog("[TM] refreshTunnels: \(list.map { "\($0.id):\($0.status) err=\($0.errorMessage ?? "nil")" })")
         Task { @MainActor in
             self.tunnels = list
         }
@@ -132,17 +157,28 @@ final class TunnelViewModel: TunnelEventHandler {
     // MARK: - TunnelEventHandler (called by Rust on background thread)
 
     func onTunnelStateChanged(id: String, status: TunnelStatus, errorMessage: String?) {
+        tmLog("[TM] onTunnelStateChanged id=\(id) status=\(status) error=\(errorMessage ?? "nil")")
         Task { @MainActor in
             if let idx = self.tunnels.firstIndex(where: { $0.id == id }) {
                 let old = self.tunnels[idx]
+                let resolvedError: String?
+                if status == .disconnected && errorMessage == nil && old.errorMessage != nil {
+                    resolvedError = old.errorMessage
+                } else if status == .connected || status == .connecting {
+                    resolvedError = nil
+                } else {
+                    resolvedError = errorMessage
+                }
+                tmLog("[TM] Updating tunnel \(id): status=\(status) resolvedError=\(resolvedError ?? "nil") oldError=\(old.errorMessage ?? "nil")")
                 self.tunnels[idx] = TunnelInfo(
                     id: old.id, name: old.name, status: status,
                     localPort: old.localPort, remoteHost: old.remoteHost,
-                    remotePort: old.remotePort, errorMessage: errorMessage,
+                    remotePort: old.remotePort, errorMessage: resolvedError,
                     authMethod: old.authMethod, jumpHostName: old.jumpHostName,
                     showTrafficChart: old.showTrafficChart
                 )
             } else {
+                tmLog("[TM] Tunnel \(id) not found in list, refreshing")
                 self.refreshTunnels()
             }
         }
@@ -182,6 +218,7 @@ final class TunnelViewModel: TunnelEventHandler {
     }
 
     func onError(id: String, message: String) {
+        tmLog("[TM] onError id=\(id) message=\(message)")
         Task { @MainActor in
             if let idx = self.tunnels.firstIndex(where: { $0.id == id }) {
                 let old = self.tunnels[idx]

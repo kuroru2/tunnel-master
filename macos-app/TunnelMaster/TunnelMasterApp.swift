@@ -8,6 +8,9 @@ struct TunnelMasterApp: App {
         MenuBarExtra {
             ContentView(viewModel: viewModel)
                 .frame(width: 320, height: 400)
+                .task {
+                    viewModel.start()
+                }
         } label: {
             let connected = viewModel.tunnels.filter { $0.status == .connected }.count
             if connected > 0 {
