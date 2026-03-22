@@ -52,20 +52,27 @@ jobs:
             -derivedDataPath build \
             build
 
-      - name: Package app
+      - name: Package DMG
         working-directory: macos-app
         run: |
           APP_PATH="build/Build/Products/Release/Tunnel Master.app"
-          # Create zip for GitHub Release
-          cd "$(dirname "$APP_PATH")"
-          zip -r -y "TunnelMaster-macOS.zip" "Tunnel Master.app"
-          mv "TunnelMaster-macOS.zip" "$GITHUB_WORKSPACE/"
+          DMG_NAME="TunnelMaster-macOS.dmg"
+          # Create a temporary directory for the DMG contents
+          mkdir -p dmg-staging
+          cp -R "$APP_PATH" dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          # Create DMG
+          hdiutil create -volname "Tunnel Master" \
+            -srcfolder dmg-staging \
+            -ov -format UDZO \
+            "$GITHUB_WORKSPACE/$DMG_NAME"
+          rm -rf dmg-staging
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: TunnelMaster-macOS
-          path: TunnelMaster-macOS.zip
+          path: TunnelMaster-macOS.dmg
 
   release:
     needs: build
@@ -87,4 +94,4 @@ jobs:
           name: Tunnel Master v${{ steps.version.outputs.version }}
           draft: false
           generate_release_notes: true
-          files: TunnelMaster-macOS.zip
+          files: TunnelMaster-macOS.dmg
