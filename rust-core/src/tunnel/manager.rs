@@ -332,6 +332,15 @@ impl TunnelManagerActor {
 
                 ManagerCommand::Connect { id, reply } => {
                     let result = self.handle_connect(&id).await;
+                    if result.is_err() {
+                        // If this was a reconnect attempt, schedule the next one
+                        if let Some(tunnel) = self.tunnels.get_mut(&id) {
+                            if tunnel.was_connected {
+                                tunnel.reconnect_attempts += 1;
+                                self.schedule_reconnect(&id);
+                            }
+                        }
+                    }
                     let _ = reply.send(result);
                 }
 
@@ -444,8 +453,31 @@ impl TunnelManagerActor {
         Ok(())
     }
 
+    /// Schedule a reconnect attempt with exponential backoff.
+    fn schedule_reconnect(&self, id: &str) {
+        let tunnel = match self.tunnels.get(id) {
+            Some(t) if t.was_connected => t,
+            _ => return,
+        };
+        let attempts = tunnel.reconnect_attempts;
+        let delay_secs = std::cmp::min(2u64.saturating_pow(attempts), 60);
+        info!("Scheduling reconnect for {} in {}s (attempt {})", id, delay_secs, attempts + 1);
+
+        let manager_tx = self.manager_tx.clone();
+        let tunnel_id = id.to_string();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+            let (tx, _rx) = tokio::sync::oneshot::channel();
+            let _ = manager_tx.send(ManagerCommand::Connect {
+                id: tunnel_id,
+                reply: tx,
+            }).await;
+        });
+    }
+
     async fn handle_connect(&mut self, id: &str) -> Result<(), TunnelError> {
         // Check tunnel exists and is not already connected
+        let is_reconnecting;
         {
             let tunnel = self
                 .tunnels
@@ -459,8 +491,13 @@ impl TunnelManagerActor {
                 return Ok(());
             }
 
+            is_reconnecting = tunnel.was_connected && tunnel.reconnect_attempts > 0;
             tunnel.status = TunnelStatus::Connecting;
-            tunnel.error_message = None;
+            if is_reconnecting {
+                tunnel.error_message = Some(format!("Reconnecting (attempt {})...", tunnel.reconnect_attempts));
+            } else {
+                tunnel.error_message = None;
+            }
         }
         self.emit_status(id, &TunnelStatus::Connecting);
 
@@ -731,24 +768,10 @@ impl TunnelManagerActor {
 
         // Auto-reconnect with exponential backoff
         if should_reconnect {
-            let attempts = self.tunnels.get(id).map_or(0, |t| t.reconnect_attempts);
-            let delay_secs = std::cmp::min(2u64.saturating_pow(attempts), 60);
-            info!("Scheduling reconnect for {} in {}s (attempt {})", id, delay_secs, attempts + 1);
-
             if let Some(tunnel) = self.tunnels.get_mut(id) {
-                tunnel.reconnect_attempts = attempts + 1;
+                tunnel.reconnect_attempts += 1;
             }
-
-            let manager_tx = self.manager_tx.clone();
-            let tunnel_id = id.to_string();
-            tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
-                let (tx, _rx) = tokio::sync::oneshot::channel();
-                let _ = manager_tx.send(ManagerCommand::Connect {
-                    id: tunnel_id,
-                    reply: tx,
-                }).await;
-            });
+            self.schedule_reconnect(id);
         }
     }
 
