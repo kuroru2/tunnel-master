@@ -57,6 +57,20 @@ final class TunnelViewModel: TunnelEventHandler {
         core = TunnelCore(eventHandler: self)
         tmLog("[TM] TunnelCore created, refreshing tunnels")
         refreshTunnels()
+        autoConnectTunnels()
+    }
+
+    private func autoConnectTunnels() {
+        guard let core else { return }
+        // Use list directly from core (tunnels array may not be populated yet)
+        let allTunnels = core.listTunnels()
+        for tunnel in allTunnels {
+            if let config = core.getTunnelConfig(id: tunnel.id),
+               config.autoConnect {
+                tmLog("[TM] Auto-connecting tunnel: \(tunnel.name)")
+                core.connect(id: tunnel.id)
+            }
+        }
     }
 
     func shutdown() {
