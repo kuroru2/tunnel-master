@@ -59,6 +59,34 @@ final class TunnelViewModel: TunnelEventHandler {
         }
     }
 
+    // MARK: - CRUD operations
+
+    func deleteTunnel(id: String) {
+        core?.deleteTunnel(id: id)
+        refreshTunnels()
+    }
+
+    func reorderTunnels(ids: [String]) {
+        core?.reorderTunnels(ids: ids)
+        refreshTunnels()
+    }
+
+    func getTunnelConfig(id: String) -> TunnelConfig? {
+        return core?.getTunnelConfig(id: id)
+    }
+
+    func addTunnel(config: TunnelConfig) {
+        core?.addTunnel(config: config)
+        refreshTunnels()
+        currentView = .editList
+    }
+
+    func updateTunnel(id: String, config: TunnelConfig) {
+        core?.updateTunnel(id: id, config: config)
+        refreshTunnels()
+        currentView = .editList
+    }
+
     // MARK: - Dialog actions
 
     func submitPassphrase(_ passphrase: String, tunnelId: String) {

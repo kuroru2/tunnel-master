@@ -10,9 +10,11 @@
 		154EF0FE0FDB1985CFE4F8E9 /* PassphraseDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511DE648D89734104697F146 /* PassphraseDialog.swift */; };
 		20E10E8F3A61377F4913CF30 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2824DF990BEF304BA6EA316 /* Assets.xcassets */; };
 		497AFE510BB39913F5A5623F /* TunnelMasterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22513356CC96CBDE03AECE02 /* TunnelMasterApp.swift */; };
+		621F4775A4D20AA654687842 /* EditFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36509F9847DC94B90525529 /* EditFormView.swift */; };
 		819F53D74B062F2747619A01 /* PasswordDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211C9D4F9218E1FC5327EF90 /* PasswordDialog.swift */; };
 		9BCB604EA831784975568099 /* TunnelCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EBBF03CFB3B4CA1B0F15C6B /* TunnelCore.swift */; };
 		A26B8F29B6117AE34F0BCCF7 /* TunnelRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF38CF1563FD21A5701B0B6F /* TunnelRow.swift */; };
+		A58C0F7F09C276765507A594 /* EditListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB45157C7F493A322A0FAA95 /* EditListView.swift */; };
 		AA73CF87DE84C3C74EF10ADC /* TunnelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66736CBD49CC8786D526D6C7 /* TunnelListView.swift */; };
 		ACCD6BDBB838A36BDF7EB8C2 /* KeyboardInteractiveDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E05C9CF822B29A998904748 /* KeyboardInteractiveDialog.swift */; };
 		B5278215CDAA891F2F817CB9 /* TunnelViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D9189AF6859E3D5792D545 /* TunnelViewModel.swift */; };
@@ -31,9 +33,11 @@
 		66736CBD49CC8786D526D6C7 /* TunnelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelListView.swift; sourceTree = "<group>"; };
 		9EBBF03CFB3B4CA1B0F15C6B /* TunnelCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelCore.swift; sourceTree = "<group>"; };
 		A4D9189AF6859E3D5792D545 /* TunnelViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelViewModel.swift; sourceTree = "<group>"; };
+		C36509F9847DC94B90525529 /* EditFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditFormView.swift; sourceTree = "<group>"; };
 		E2824DF990BEF304BA6EA316 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E36E874B0C50087879B70597 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F2C2F97FCF40919ED0DE4488 /* TunnelMaster.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TunnelMaster.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FB45157C7F493A322A0FAA95 /* EditListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditListView.swift; sourceTree = "<group>"; };
 		FF38CF1563FD21A5701B0B6F /* TunnelRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelRow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -84,6 +88,8 @@
 		93B6FF4E36FDCF37AA88CC34 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				C36509F9847DC94B90525529 /* EditFormView.swift */,
+				FB45157C7F493A322A0FAA95 /* EditListView.swift */,
 				66736CBD49CC8786D526D6C7 /* TunnelListView.swift */,
 				FF38CF1563FD21A5701B0B6F /* TunnelRow.swift */,
 			);
@@ -188,6 +194,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				ED8F5AA87C45299FAF06D98A /* ContentView.swift in Sources */,
+				621F4775A4D20AA654687842 /* EditFormView.swift in Sources */,
+				A58C0F7F09C276765507A594 /* EditListView.swift in Sources */,
 				E96B840E0991E984C8E2B248 /* HostKeyDialog.swift in Sources */,
 				ACCD6BDBB838A36BDF7EB8C2 /* KeyboardInteractiveDialog.swift in Sources */,
 				154EF0FE0FDB1985CFE4F8E9 /* PassphraseDialog.swift in Sources */,
