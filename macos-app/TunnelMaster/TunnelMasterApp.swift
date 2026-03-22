@@ -9,7 +9,12 @@ struct TunnelMasterApp: App {
             ContentView(viewModel: viewModel)
                 .frame(width: 320, height: 400)
         } label: {
-            Image(systemName: "network")
+            let connected = viewModel.tunnels.filter { $0.status == .connected }.count
+            if connected > 0 {
+                Label("\(connected)", systemImage: "network")
+            } else {
+                Image(systemName: "network")
+            }
         }
         .menuBarExtraStyle(.window)
     }
