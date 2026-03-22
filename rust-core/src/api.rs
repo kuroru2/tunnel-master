@@ -19,6 +19,18 @@ pub struct TunnelCore {
 impl TunnelCore {
     #[uniffi::constructor]
     pub fn new(event_handler: Arc<dyn TunnelEventHandler>) -> Self {
+        // Initialize tracing → macOS Console.app (os_log)
+        #[cfg(target_os = "macos")]
+        {
+            use tracing_subscriber::prelude::*;
+            let _ = tracing_subscriber::registry()
+                .with(tracing_oslog::OsLogger::new(
+                    "com.kuroru2.tunnel-master",
+                    "default",
+                ))
+                .try_init();
+        }
+
         let runtime = tokio::runtime::Handle::try_current()
             .unwrap_or_else(|_| {
                 let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");

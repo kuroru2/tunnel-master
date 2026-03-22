@@ -14,7 +14,8 @@ settings:
     LIBRARY_SEARCH_PATHS:
       - "$(PROJECT_DIR)/../rust-core/target/release"
     OTHER_LDFLAGS:
-      - "-ltunnel_core"
+      - "-force_load"
+      - "$(PROJECT_DIR)/../rust-core/target/release/libtunnel_core.a"
       - "-framework Security"
       - "-framework CoreFoundation"
     SWIFT_INCLUDE_PATHS:
