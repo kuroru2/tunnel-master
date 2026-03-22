@@ -1,85 +1,71 @@
 <p align="center">
-  <img src="src-tauri/icons/icon.png" width="128" alt="Tunnel Master icon" />
+  <img src="macos-app/TunnelMaster/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Tunnel Master icon" />
 </p>
 
 # Tunnel Master
 
-A lightweight SSH tunnel manager that lives in your system tray. Create, manage, and monitor SSH port-forwarding tunnels without touching the terminal.
+A lightweight SSH tunnel manager that lives in your menu bar. Create, manage, and monitor SSH port-forwarding tunnels without touching the terminal.
 
-Built with [Tauri v2](https://v2.tauri.app), Rust, React, and Tailwind CSS.
-
-<p align="center">
-  <img src="docs/imgs/app_screenshot.png" width="480" alt="Tunnel Master — tunnels with real-time traffic sparklines" />
-</p>
+Built with SwiftUI and Rust (via [UniFFI](https://mozilla.github.io/uniffi-rs/)). macOS 14+ (Sonoma).
 
 ## Features
 
-- **System tray app** — runs in the background, click the tray icon to open
+- **Menu bar app** — runs in the background, click the tray icon to open
 - **One-click connect/disconnect** — start and stop tunnels instantly
-- **Real-time traffic monitor** — per-tunnel sparkline charts with download/upload rates
-- **In-app config editor** — add, edit, and delete tunnels from the UI
+- **Real-time traffic monitor** — per-tunnel sparkline charts
+- **In-app config editor** — add, edit, delete, and reorder tunnels
+- **Multiple auth methods** — SSH key, password, agent, keyboard-interactive (2FA)
+- **ProxyJump support** — connect through jump hosts
+- **Keychain integration** — stores SSH passphrases and passwords securely
 - **Native file picker** — browse for SSH key files
-- **Passphrase support** — stores SSH key passphrases in macOS Keychain
 - **Auto-reconnect ready** — health monitoring with keepalive detection
-- **Cross-platform** — macOS (NSPanel popover), Linux, and Windows
-
-### macOS extras
-
-- Non-activating panel overlay (no space switching)
-- Works on fullscreen spaces
-- Click-outside to dismiss
-- Keychain integration for SSH passphrases
 
 ## Install
 
-Download the latest release from [Releases](../../releases):
+### macOS (current — v1.0+)
 
-| Platform | Format |
-|----------|--------|
-| macOS | `.dmg` |
-| Linux | `.deb`, `.AppImage` |
-| Windows | `.msi`, `.exe` |
+Download the latest `.dmg` from [Releases](../../releases).
 
-No runtime dependencies — everything is bundled in the binary.
-
-> **macOS note:** The app is not code-signed. macOS will show a warning that the app "is damaged and can't be opened." To fix this, run:
+> **Note:** The app is not code-signed. macOS will show a warning. To fix:
 > ```bash
 > xattr -cr /Applications/Tunnel\ Master.app
 > ```
+
+### Linux / Windows
+
+The SwiftUI version is macOS-only. For Linux and Windows, use the last Tauri release:
+[**v0.5.3**](../../releases/tag/v0.5.3) (Tauri + React, cross-platform).
 
 ## Development
 
 ### Prerequisites
 
 - [Rust](https://rustup.rs/) (stable)
-- [Node.js](https://nodejs.org/) >= 20
-- macOS: Xcode Command Line Tools
-- Linux: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
+- Xcode 16+ (for SwiftUI build)
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+
+### Build
+
+```bash
+cd macos-app
+./build.sh
+```
+
+This builds the Rust core, generates UniFFI Swift bindings, and creates the Xcode project.
 
 ### Run
 
+Open `macos-app/TunnelMaster.xcodeproj` in Xcode and run, or:
+
 ```bash
-npm install
-npx tauri dev
+cd macos-app
+xcodebuild -project TunnelMaster.xcodeproj -scheme TunnelMaster -configuration Debug build
 ```
 
 ### Test
 
 ```bash
-# Rust tests
-cd src-tauri && cargo test
-
-# TypeScript check
-npx tsc -b
-
-# Lint
-npm run lint
-```
-
-### Build
-
-```bash
-npx tauri build
+cd rust-core && cargo test
 ```
 
 ## Configuration
@@ -96,12 +82,15 @@ Tunnels are stored in `~/.tunnel-master/config.json`. You can edit this file dir
       "host": "bastion.example.com",
       "port": 22,
       "user": "sergio",
+      "authMethod": "key",
       "keyPath": "~/.ssh/id_ed25519",
       "type": "local",
       "localPort": 5432,
       "remoteHost": "db.internal",
       "remotePort": 5432,
-      "autoConnect": false
+      "autoConnect": false,
+      "jumpHost": null,
+      "showTrafficChart": true
     }
   ],
   "settings": {
@@ -116,30 +105,35 @@ Tunnels are stored in `~/.tunnel-master/config.json`. You can edit this file dir
 ## Architecture
 
 ```
-src-tauri/src/
-├── lib.rs              # App setup, tray icon, NSPanel (macOS)
-├── commands.rs         # Tauri IPC commands (CRUD, connect, disconnect)
+rust-core/src/
+├── api.rs              # TunnelCore — UniFFI entry point for Swift
+├── events.rs           # TunnelEventHandler callback trait
 ├── config/store.rs     # Config file load/save with atomic writes
 ├── tunnel/
 │   ├── manager.rs      # Actor-based tunnel lifecycle management
 │   ├── connection.rs   # SSH connection via russh
 │   ├── forwarder.rs    # TCP port forwarding with byte counting
-│   ├── traffic.rs      # Traffic counters, sampler, and sparkline data
+│   ├── traffic.rs      # Traffic counters and sparkline data
 │   └── health.rs       # Keepalive health monitoring
-├── keychain.rs         # Passphrase storage (macOS Keychain)
+├── keychain.rs         # Credential storage (macOS Keychain)
 ├── errors.rs           # Error types
-└── types.rs            # Shared data types
+└── types.rs            # Shared data types (UniFFI-annotated)
 
-src/
-├── App.tsx             # View state machine (normal/edit-list/edit-form)
-├── components/
-│   ├── TunnelList.tsx  # Main tunnel list with connect/disconnect
-│   ├── EditList.tsx    # Edit mode with two-step delete
-│   ├── EditForm.tsx    # Grouped form for add/edit tunnel
-│   ├── TrafficSparkline.tsx  # SVG sparkline for traffic visualization
-│   └── PassphraseDialog.tsx
-├── hooks/useTunnels.ts # React hook for tunnel state and CRUD
-└── types.ts            # TypeScript type definitions
+macos-app/TunnelMaster/
+├── TunnelMasterApp.swift    # @main, MenuBarExtra with .window style
+├── TunnelViewModel.swift    # @Observable, implements TunnelEventHandler
+├── ContentView.swift        # View routing
+├── Views/
+│   ├── TunnelListView.swift
+│   ├── TunnelRow.swift
+│   ├── TrafficSparkline.swift
+│   ├── EditListView.swift
+│   └── EditFormView.swift
+└── Dialogs/
+    ├── PassphraseDialog.swift
+    ├── PasswordDialog.swift
+    ├── HostKeyDialog.swift
+    └── KeyboardInteractiveDialog.swift
 ```
 
 ## License
