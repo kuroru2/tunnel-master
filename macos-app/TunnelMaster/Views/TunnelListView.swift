@@ -37,7 +37,7 @@ struct TunnelListView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(viewModel.tunnels, id: \.id) { tunnel in
-                            TunnelRow(tunnel: tunnel) {
+                            TunnelRow(tunnel: tunnel, samples: viewModel.trafficHistory[tunnel.id] ?? []) {
                                 viewModel.toggleConnection(id: tunnel.id)
                             }
                             Divider()

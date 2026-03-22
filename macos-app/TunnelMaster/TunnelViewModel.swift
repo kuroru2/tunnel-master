@@ -6,6 +6,7 @@ final class TunnelViewModel: TunnelEventHandler {
     var tunnels: [TunnelInfo] = []
     var currentView: ViewMode = .list
     var activeDialog: DialogState? = nil
+    var trafficHistory: [String: [TrafficSample]] = [:]
 
     private var core: TunnelCore?
 
@@ -168,7 +169,12 @@ final class TunnelViewModel: TunnelEventHandler {
     }
 
     func onTrafficUpdate(id: String, sample: TrafficSample) {
-        // Phase 3: traffic sparklines
+        Task { @MainActor in
+            var history = self.trafficHistory[id] ?? []
+            history.append(sample)
+            if history.count > 60 { history.removeFirst(history.count - 60) }
+            self.trafficHistory[id] = history
+        }
     }
 
     func onError(id: String, message: String) {
