@@ -103,6 +103,30 @@ final class TunnelViewModel: TunnelEventHandler {
         }
     }
 
+    // MARK: - SSH Terminal
+
+    func openTerminal(id: String) {
+        guard let core, let config = core.getTunnelConfig(id: id) else { return }
+        let port = config.port == 22 ? "" : " -p \(config.port)"
+        let sshCommand = "ssh \(config.user)@\(config.host)\(port)"
+        tmLog("[TM] Opening terminal: \(sshCommand)")
+
+        // Use AppleScript to open Terminal.app with the SSH command
+        let script = """
+            tell application "Terminal"
+                activate
+                do script "\(sshCommand)"
+            end tell
+            """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+            if let error {
+                tmLog("[TM] AppleScript error: \(error)")
+            }
+        }
+    }
+
     // MARK: - CRUD operations
 
     func deleteTunnel(id: String) {

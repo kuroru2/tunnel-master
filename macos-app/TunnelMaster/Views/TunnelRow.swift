@@ -4,6 +4,7 @@ struct TunnelRow: View {
     let tunnel: TunnelInfo
     let samples: [TrafficSample]
     let onToggle: () -> Void
+    let onOpenTerminal: () -> Void
 
     var body: some View {
         ZStack {
@@ -39,6 +40,16 @@ struct TunnelRow: View {
                 }
 
                 Spacer()
+
+                Button {
+                    onOpenTerminal()
+                } label: {
+                    Image(systemName: "terminal")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Open SSH terminal")
 
                 if tunnel.status == .connecting || tunnel.status == .disconnecting {
                     ProgressView()
