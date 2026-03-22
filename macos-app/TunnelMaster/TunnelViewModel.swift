@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import AppKit
 import os.log
+import UserNotifications
 
 private let logger = Logger(subsystem: "com.kuroru2.tunnel-master", category: "ViewModel")
 
@@ -59,6 +60,26 @@ final class TunnelViewModel: TunnelEventHandler {
         tmLog("[TM] TunnelCore created, refreshing tunnels")
         refreshTunnels()
         autoConnectTunnels()
+        requestNotificationPermission()
+    }
+
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            tmLog("[TM] Notification permission: \(granted)")
+        }
+    }
+
+    private func sendNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func autoConnectTunnels() {
@@ -203,6 +224,16 @@ final class TunnelViewModel: TunnelEventHandler {
                     resolvedError = errorMessage
                 }
                 tmLog("[TM] Updating tunnel \(id): status=\(status) resolvedError=\(resolvedError ?? "nil") oldError=\(old.errorMessage ?? "nil")")
+                // Notify on meaningful transitions
+                if status == .connected && old.status != .connected {
+                    self.sendNotification(title: "Tunnel Connected", body: old.name)
+                } else if status == .disconnected && old.status == .connected {
+                    self.sendNotification(title: "Tunnel Disconnected", body: old.name)
+                }
+                if let err = resolvedError, !err.isEmpty, old.errorMessage == nil {
+                    self.sendNotification(title: "Tunnel Error", body: "\(old.name): \(err)")
+                }
+
                 self.tunnels[idx] = TunnelInfo(
                     id: old.id, name: old.name, status: status,
                     localPort: old.localPort, remoteHost: old.remoteHost,
