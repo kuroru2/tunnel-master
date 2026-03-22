@@ -97,6 +97,10 @@ struct TunnelState {
     traffic_counters: Option<Arc<TrafficCounters>>,
     /// Ring buffer of traffic samples (last 60 seconds)
     traffic_history: TrafficHistory,
+    /// Whether this tunnel was user-connected (eligible for auto-reconnect)
+    was_connected: bool,
+    /// Number of consecutive reconnect attempts
+    reconnect_attempts: u32,
 }
 
 impl TunnelState {
@@ -112,6 +116,8 @@ impl TunnelState {
             generation: 0,
             traffic_counters: None,
             traffic_history: traffic::new_traffic_history(),
+            was_connected: false,
+            reconnect_attempts: 0,
         }
     }
 }
@@ -627,6 +633,8 @@ impl TunnelManagerActor {
             tunnel.abort_handles.push(sampler_handle.abort_handle());
             tunnel.ssh_connection = Some(ssh);
             tunnel.status = TunnelStatus::Connected;
+            tunnel.was_connected = true;
+            tunnel.reconnect_attempts = 0;
             tunnel.traffic_counters = Some(traffic_counters);
         }
         self.emit_status(id, &TunnelStatus::Connected);
@@ -666,6 +674,8 @@ impl TunnelManagerActor {
             tunnel.traffic_history.lock().unwrap().clear();
             tunnel.status = TunnelStatus::Disconnected;
             tunnel.error_message = None;
+            tunnel.was_connected = false;
+            tunnel.reconnect_attempts = 0;
         }
         self.emit_status(id, &TunnelStatus::Disconnected);
 
@@ -689,6 +699,9 @@ impl TunnelManagerActor {
         }
 
         warn!("Tunnel {} died: {}", id, error);
+
+        let should_reconnect = self.tunnels.get(id).map_or(false, |t| t.was_connected);
+
         {
             let tunnel = self.tunnels.get_mut(id).unwrap();
             tunnel.status = TunnelStatus::Error;
@@ -715,6 +728,28 @@ impl TunnelManagerActor {
             tunnel.status = TunnelStatus::Disconnected;
         }
         self.emit_status(id, &TunnelStatus::Disconnected);
+
+        // Auto-reconnect with exponential backoff
+        if should_reconnect {
+            let attempts = self.tunnels.get(id).map_or(0, |t| t.reconnect_attempts);
+            let delay_secs = std::cmp::min(2u64.saturating_pow(attempts), 60);
+            info!("Scheduling reconnect for {} in {}s (attempt {})", id, delay_secs, attempts + 1);
+
+            if let Some(tunnel) = self.tunnels.get_mut(id) {
+                tunnel.reconnect_attempts = attempts + 1;
+            }
+
+            let manager_tx = self.manager_tx.clone();
+            let tunnel_id = id.to_string();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+                let (tx, _rx) = tokio::sync::oneshot::channel();
+                let _ = manager_tx.send(ManagerCommand::Connect {
+                    id: tunnel_id,
+                    reply: tx,
+                }).await;
+            });
+        }
     }
 
     fn handle_add_tunnel(&mut self, config: TunnelConfig) -> Result<TunnelInfo, TunnelError> {
