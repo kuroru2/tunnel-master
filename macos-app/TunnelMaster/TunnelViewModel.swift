@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import AppKit
 import os.log
 
 private let logger = Logger(subsystem: "com.kuroru2.tunnel-master", category: "ViewModel")
@@ -111,20 +112,14 @@ final class TunnelViewModel: TunnelEventHandler {
         let sshCommand = "ssh \(config.user)@\(config.host)\(port)"
         tmLog("[TM] Opening terminal: \(sshCommand)")
 
-        // Use AppleScript to open Terminal.app with the SSH command
-        let script = """
-            tell application "Terminal"
-                activate
-                do script "\(sshCommand)"
-            end tell
-            """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-            if let error {
-                tmLog("[TM] AppleScript error: \(error)")
-            }
-        }
+        // Create a temp shell script and open it with Terminal
+        let tmpDir = FileManager.default.temporaryDirectory
+        let scriptFile = tmpDir.appendingPathComponent("tm-ssh-\(id).command")
+        let scriptContent = "#!/bin/bash\n\(sshCommand)\n"
+        try? scriptContent.write(to: scriptFile, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: scriptFile.path)
+        NSWorkspace.shared.open(scriptFile)
     }
 
     // MARK: - CRUD operations
