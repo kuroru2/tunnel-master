@@ -33,13 +33,11 @@ struct TunnelRow: View {
                             Text(msg)
                                 .font(.caption2)
                                 .foregroundStyle(.red)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
+                                .lineLimit(2)
                         }
-                        .transition(.opacity)
+                        .frame(height: 24, alignment: .topLeading)
                     }
                 }
-                .animation(.easeInOut(duration: 0.2), value: tunnel.errorMessage)
 
                 Spacer()
 
