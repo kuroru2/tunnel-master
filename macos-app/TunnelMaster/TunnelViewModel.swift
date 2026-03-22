@@ -27,6 +27,10 @@ final class TunnelViewModel: TunnelEventHandler {
     }
 
     func start() {
+        guard core == nil else {
+            refreshTunnels()
+            return
+        }
         core = TunnelCore(eventHandler: self)
         refreshTunnels()
     }
