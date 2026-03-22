@@ -24,15 +24,20 @@ struct TunnelRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if tunnel.status == .error, let msg = tunnel.errorMessage {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                            Text(msg)
+                                .font(.caption2)
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        }
+                    }
                 }
 
                 Spacer()
-
-                if tunnel.status == .error, let msg = tunnel.errorMessage {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .help(msg)
-                }
 
                 if tunnel.status == .connecting || tunnel.status == .disconnecting {
                     ProgressView()
