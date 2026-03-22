@@ -59,6 +59,43 @@ final class TunnelViewModel: TunnelEventHandler {
         }
     }
 
+    // MARK: - Dialog actions
+
+    func submitPassphrase(_ passphrase: String, tunnelId: String) {
+        core?.submitPassphrase(id: tunnelId, passphrase: passphrase)
+        activeDialog = nil
+    }
+
+    func submitPassword(_ password: String, tunnelId: String) {
+        core?.submitPassword(id: tunnelId, password: password)
+        activeDialog = nil
+    }
+
+    func acceptHostKey(host: String, port: UInt16) {
+        // Save tunnelId before clearing dialog
+        var tunnelIdToReconnect: String? = nil
+        if case .hostKey(let tid, _, _, _, _) = activeDialog {
+            tunnelIdToReconnect = tid
+        }
+        core?.acceptHostKey(host: host, port: port)
+        activeDialog = nil
+        if let tid = tunnelIdToReconnect {
+            core?.connect(id: tid)
+        }
+    }
+
+    func respondKeyboardInteractive(_ responses: [String], tunnelId: String) {
+        core?.respondKeyboardInteractive(id: tunnelId, responses: responses)
+        activeDialog = nil
+    }
+
+    func cancelDialog() {
+        if case .keyboardInteractive(let tid, _, _, _) = activeDialog {
+            core?.cancelAuth(id: tid)
+        }
+        activeDialog = nil
+    }
+
     // MARK: - TunnelEventHandler (called by Rust on background thread)
 
     func onTunnelStateChanged(id: String, status: TunnelStatus, errorMessage: String?) {

@@ -7,19 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		154EF0FE0FDB1985CFE4F8E9 /* PassphraseDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511DE648D89734104697F146 /* PassphraseDialog.swift */; };
 		20E10E8F3A61377F4913CF30 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2824DF990BEF304BA6EA316 /* Assets.xcassets */; };
 		497AFE510BB39913F5A5623F /* TunnelMasterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22513356CC96CBDE03AECE02 /* TunnelMasterApp.swift */; };
+		819F53D74B062F2747619A01 /* PasswordDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211C9D4F9218E1FC5327EF90 /* PasswordDialog.swift */; };
 		9BCB604EA831784975568099 /* TunnelCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EBBF03CFB3B4CA1B0F15C6B /* TunnelCore.swift */; };
 		A26B8F29B6117AE34F0BCCF7 /* TunnelRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF38CF1563FD21A5701B0B6F /* TunnelRow.swift */; };
 		AA73CF87DE84C3C74EF10ADC /* TunnelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66736CBD49CC8786D526D6C7 /* TunnelListView.swift */; };
+		ACCD6BDBB838A36BDF7EB8C2 /* KeyboardInteractiveDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E05C9CF822B29A998904748 /* KeyboardInteractiveDialog.swift */; };
 		B5278215CDAA891F2F817CB9 /* TunnelViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D9189AF6859E3D5792D545 /* TunnelViewModel.swift */; };
+		E96B840E0991E984C8E2B248 /* HostKeyDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4F762235AFAEE3FAC181DF /* HostKeyDialog.swift */; };
 		ED8F5AA87C45299FAF06D98A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E36E874B0C50087879B70597 /* ContentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		13D50E40FE1C002BC97537EA /* TunnelMaster.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TunnelMaster.entitlements; sourceTree = "<group>"; };
+		211C9D4F9218E1FC5327EF90 /* PasswordDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordDialog.swift; sourceTree = "<group>"; };
 		2173EFF047ED632585D4294C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		22513356CC96CBDE03AECE02 /* TunnelMasterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelMasterApp.swift; sourceTree = "<group>"; };
+		2E05C9CF822B29A998904748 /* KeyboardInteractiveDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardInteractiveDialog.swift; sourceTree = "<group>"; };
+		511DE648D89734104697F146 /* PassphraseDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PassphraseDialog.swift; sourceTree = "<group>"; };
+		5C4F762235AFAEE3FAC181DF /* HostKeyDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostKeyDialog.swift; sourceTree = "<group>"; };
 		66736CBD49CC8786D526D6C7 /* TunnelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelListView.swift; sourceTree = "<group>"; };
 		9EBBF03CFB3B4CA1B0F15C6B /* TunnelCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelCore.swift; sourceTree = "<group>"; };
 		A4D9189AF6859E3D5792D545 /* TunnelViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelViewModel.swift; sourceTree = "<group>"; };
@@ -55,10 +63,22 @@
 				13D50E40FE1C002BC97537EA /* TunnelMaster.entitlements */,
 				22513356CC96CBDE03AECE02 /* TunnelMasterApp.swift */,
 				A4D9189AF6859E3D5792D545 /* TunnelViewModel.swift */,
+				4EADF954CCA1292F6DA5FA69 /* Dialogs */,
 				F9EBEBA1E2F4F70E12DBC508 /* Generated */,
 				93B6FF4E36FDCF37AA88CC34 /* Views */,
 			);
 			path = TunnelMaster;
+			sourceTree = "<group>";
+		};
+		4EADF954CCA1292F6DA5FA69 /* Dialogs */ = {
+			isa = PBXGroup;
+			children = (
+				5C4F762235AFAEE3FAC181DF /* HostKeyDialog.swift */,
+				2E05C9CF822B29A998904748 /* KeyboardInteractiveDialog.swift */,
+				511DE648D89734104697F146 /* PassphraseDialog.swift */,
+				211C9D4F9218E1FC5327EF90 /* PasswordDialog.swift */,
+			);
+			path = Dialogs;
 			sourceTree = "<group>";
 		};
 		93B6FF4E36FDCF37AA88CC34 /* Views */ = {
@@ -168,6 +188,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				ED8F5AA87C45299FAF06D98A /* ContentView.swift in Sources */,
+				E96B840E0991E984C8E2B248 /* HostKeyDialog.swift in Sources */,
+				ACCD6BDBB838A36BDF7EB8C2 /* KeyboardInteractiveDialog.swift in Sources */,
+				154EF0FE0FDB1985CFE4F8E9 /* PassphraseDialog.swift in Sources */,
+				819F53D74B062F2747619A01 /* PasswordDialog.swift in Sources */,
 				9BCB604EA831784975568099 /* TunnelCore.swift in Sources */,
 				AA73CF87DE84C3C74EF10ADC /* TunnelListView.swift in Sources */,
 				497AFE510BB39913F5A5623F /* TunnelMasterApp.swift in Sources */,
