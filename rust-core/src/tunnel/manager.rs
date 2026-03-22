@@ -670,6 +670,7 @@ impl TunnelManagerActor {
             tunnel.abort_handles.push(sampler_handle.abort_handle());
             tunnel.ssh_connection = Some(ssh);
             tunnel.status = TunnelStatus::Connected;
+            tunnel.error_message = None;
             tunnel.was_connected = true;
             tunnel.reconnect_attempts = 0;
             tunnel.traffic_counters = Some(traffic_counters);
