@@ -36,8 +36,10 @@ struct TunnelRow: View {
                                 .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
+                        .transition(.opacity)
                     }
                 }
+                .animation(.easeInOut(duration: 0.2), value: tunnel.errorMessage)
 
                 Spacer()
 
@@ -51,19 +53,22 @@ struct TunnelRow: View {
                 .buttonStyle(.plain)
                 .help("Open SSH terminal")
 
-                if tunnel.status == .connecting || tunnel.status == .disconnecting {
-                    ProgressView()
+                // Fixed-width container for toggle/spinner to prevent layout jitter
+                ZStack {
+                    if tunnel.status == .connecting || tunnel.status == .disconnecting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Toggle("", isOn: Binding(
+                            get: { tunnel.status == .connected },
+                            set: { _ in onToggle() }
+                        ))
+                        .toggleStyle(.switch)
                         .controlSize(.small)
-                        .frame(width: 24)
-                } else {
-                    Toggle("", isOn: Binding(
-                        get: { tunnel.status == .connected },
-                        set: { _ in onToggle() }
-                    ))
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .labelsHidden()
+                        .labelsHidden()
+                    }
                 }
+                .frame(width: 36)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
