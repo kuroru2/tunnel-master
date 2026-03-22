@@ -17,7 +17,7 @@ struct TrafficSparkline: View {
                               style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             }
             .allowsHitTesting(false)
-            .opacity(0.25)
+            .opacity(0.4)
         }
     }
 
