@@ -8,7 +8,8 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "6.0"
+    SWIFT_VERSION: "5"
+    SWIFT_STRICT_CONCURRENCY: minimal
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     LIBRARY_SEARCH_PATHS:
       - "$(PROJECT_DIR)/../rust-core/target/release"
