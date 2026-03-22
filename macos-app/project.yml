@@ -1,0 +1,47 @@
+name: TunnelMaster
+options:
+  bundleIdPrefix: com.kuroru2
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.4"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    LIBRARY_SEARCH_PATHS:
+      - "$(PROJECT_DIR)/../rust-core/target/release"
+    OTHER_LDFLAGS:
+      - "-ltunnel_core"
+      - "-framework Security"
+      - "-framework CoreFoundation"
+    SWIFT_INCLUDE_PATHS:
+      - "$(PROJECT_DIR)/TunnelMaster/Generated"
+
+targets:
+  TunnelMaster:
+    type: application
+    platform: macOS
+    sources:
+      - path: TunnelMaster
+        excludes:
+          - "Generated/TunnelCoreFFI.h"
+          - "Generated/TunnelCoreFFI.modulemap"
+    settings:
+      base:
+        INFOPLIST_FILE: TunnelMaster/Info.plist
+        CODE_SIGN_ENTITLEMENTS: TunnelMaster/TunnelMaster.entitlements
+        CODE_SIGNING_ALLOWED: "NO"
+        PRODUCT_BUNDLE_IDENTIFIER: com.kuroru2.tunnel-master
+        PRODUCT_NAME: "Tunnel Master"
+    preBuildScripts:
+      - name: "Import C Module"
+        script: |
+          MODULEMAP_DIR="${BUILT_PRODUCTS_DIR}/TunnelCoreFFI"
+          mkdir -p "$MODULEMAP_DIR"
+          cp "${PROJECT_DIR}/TunnelMaster/Generated/TunnelCoreFFI.h" "$MODULEMAP_DIR/"
+          cp "${PROJECT_DIR}/TunnelMaster/Generated/TunnelCoreFFI.modulemap" "$MODULEMAP_DIR/module.modulemap"
+        inputFiles: []
+        outputFiles: []

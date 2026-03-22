@@ -1,36 +1,30 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Rust
+target/
 
-node_modules
-dist
-dist-ssr
-*.local
+# Xcode
+macos-app/TunnelMaster.xcodeproj/
+macos-app/TunnelMaster/Generated/
+*.xcuserdata
+DerivedData/
+build/
 
-# Editor directories and files
+# Editor
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
 *.sw?
+
+# macOS
+.DS_Store
 
 # Superpowers
 .superpowers/
-
-# Rust
-target/
 
 # Claude
 .claude/
 
 # Worktrees
 .worktrees/
+
+# Logs
+*.log
