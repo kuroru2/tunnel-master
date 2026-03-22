@@ -196,10 +196,16 @@ final class TunnelViewModel: TunnelEventHandler {
                 let old = self.tunnels[idx]
                 let resolvedError: String?
                 if status == .disconnected && errorMessage == nil && old.errorMessage != nil {
+                    // Preserve error when Rust clears it during cleanup
                     resolvedError = old.errorMessage
-                } else if status == .connected || status == .connecting {
+                } else if status == .connected {
+                    // Clear error on successful connection
+                    resolvedError = nil
+                } else if status == .connecting && errorMessage == nil {
+                    // Clear error on fresh user-initiated connect (not reconnect)
                     resolvedError = nil
                 } else {
+                    // Use whatever Rust sent (includes "Reconnecting (attempt N)...")
                     resolvedError = errorMessage
                 }
                 tmLog("[TM] Updating tunnel \(id): status=\(status) resolvedError=\(resolvedError ?? "nil") oldError=\(old.errorMessage ?? "nil")")
