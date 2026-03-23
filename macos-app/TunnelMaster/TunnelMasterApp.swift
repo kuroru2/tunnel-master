@@ -1,24 +1,24 @@
 import SwiftUI
 
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var statusBarController: StatusBarController?
+    private let viewModel = TunnelViewModel()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        viewModel.start()
+        statusBarController = StatusBarController(viewModel: viewModel)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        viewModel.shutdown()
+    }
+}
+
 @main
 struct TunnelMasterApp: App {
-    @State private var viewModel = TunnelViewModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            ContentView(viewModel: viewModel)
-                .frame(width: 320, height: 400)
-                .task {
-                    viewModel.start()
-                }
-        } label: {
-            let connected = viewModel.tunnels.filter { $0.status == .connected }.count
-            if connected > 0 {
-                Label("\(connected)", systemImage: "network")
-            } else {
-                Image(systemName: "network")
-            }
-        }
-        .menuBarExtraStyle(.window)
+        SwiftUI.Settings { EmptyView() }
     }
 }
