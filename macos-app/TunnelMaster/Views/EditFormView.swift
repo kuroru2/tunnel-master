@@ -17,6 +17,7 @@ struct EditFormView: View {
     @State private var remotePort: UInt16 = 0
     @State private var autoConnect = false
     @State private var showTrafficChart = true
+    @State private var group = ""
     @State private var error: String? = nil
 
     var isValid: Bool {
@@ -111,6 +112,7 @@ struct EditFormView: View {
                         VStack(spacing: 8) {
                             Toggle("Auto Connect", isOn: $autoConnect)
                             Toggle("Traffic Chart", isOn: $showTrafficChart)
+                            formField("Group", text: $group, placeholder: "e.g. Work, Staging")
                         }
                     }
                 }.padding(12)
@@ -126,6 +128,7 @@ struct EditFormView: View {
         jumpHost = config.jumpHost; localPort = config.localPort
         remoteHost = config.remoteHost; remotePort = config.remotePort
         autoConnect = config.autoConnect; showTrafficChart = config.showTrafficChart
+        group = config.group ?? ""
     }
 
     private func save() {
@@ -134,7 +137,8 @@ struct EditFormView: View {
             id: id, name: name, host: host, port: port, user: user,
             authMethod: authMethod, keyPath: keyPath, tunnelType: .local,
             localPort: localPort, remoteHost: remoteHost, remotePort: remotePort,
-            autoConnect: autoConnect, jumpHost: jumpHost, showTrafficChart: showTrafficChart
+            autoConnect: autoConnect, jumpHost: jumpHost, showTrafficChart: showTrafficChart,
+            group: group.isEmpty ? nil : group
         )
         if tunnelId != nil {
             viewModel.updateTunnel(id: id, config: config)
@@ -163,10 +167,10 @@ struct EditFormView: View {
         if panel.runModal() == .OK, let url = panel.url { keyPath = url.path }
     }
 
-    private func formField(_ label: String, text: Binding<String>) -> some View {
+    private func formField(_ label: String, text: Binding<String>, placeholder: String = "") -> some View {
         HStack {
             Text(label).font(.caption).foregroundStyle(.secondary).frame(width: 70, alignment: .leading)
-            TextField("", text: text).textFieldStyle(.roundedBorder)
+            TextField(placeholder, text: text).textFieldStyle(.roundedBorder)
         }
     }
 

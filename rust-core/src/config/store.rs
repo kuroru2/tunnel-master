@@ -333,7 +333,7 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true,
+            show_traffic_chart: true, group: None,
         };
         assert!(validate_tunnel_input(&input, &[], None).is_ok());
     }
@@ -352,7 +352,7 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true,
+            show_traffic_chart: true, group: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("Key path is required"));
@@ -372,7 +372,7 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true,
+            show_traffic_chart: true, group: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("name"));
@@ -392,7 +392,7 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true,
+            show_traffic_chart: true, group: None,
         };
         let existing = vec![("other".to_string(), 5432u16)];
         let err = validate_tunnel_input(&input, &existing, None).unwrap_err();
@@ -413,7 +413,7 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true,
+            show_traffic_chart: true, group: None,
         };
         let existing = vec![("self-id".to_string(), 5432u16)];
         assert!(validate_tunnel_input(&input, &existing, Some("self-id")).is_ok());
@@ -433,7 +433,7 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true,
+            show_traffic_chart: true, group: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("localPort"));

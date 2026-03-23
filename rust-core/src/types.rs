@@ -52,6 +52,8 @@ pub struct TunnelConfig {
     pub jump_host: Option<String>,
     #[serde(default = "default_true")]
     pub show_traffic_chart: bool,
+    #[serde(default)]
+    pub group: Option<String>,
 }
 
 /// Input for creating/updating a tunnel — no id field
@@ -76,6 +78,8 @@ pub struct TunnelInput {
     pub jump_host: Option<String>,
     #[serde(default = "default_true")]
     pub show_traffic_chart: bool,
+    #[serde(default)]
+    pub group: Option<String>,
 }
 
 fn default_ssh_port() -> u16 { 22 }
@@ -98,6 +102,7 @@ impl TunnelInput {
             auto_connect: self.auto_connect,
             jump_host: self.jump_host,
             show_traffic_chart: self.show_traffic_chart,
+            group: None,
         }
     }
 }
@@ -150,6 +155,7 @@ pub struct TunnelInfo {
     pub auth_method: AuthMethod,
     pub jump_host_name: Option<String>,
     pub show_traffic_chart: bool,
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, uniffi::Record)]
@@ -201,7 +207,7 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true,
+            show_traffic_chart: true, group: None,
         };
         let config = input.to_config("test".to_string());
         assert_eq!(config.id, "test");

@@ -104,6 +104,20 @@ final class TunnelViewModel: TunnelEventHandler {
         }
     }
 
+    // MARK: - Group actions
+
+    func toggleGroup(_ group: String) {
+        let groupTunnels = tunnels.filter { $0.group == group }
+        let allConnected = groupTunnels.allSatisfy { $0.status == .connected }
+        for tunnel in groupTunnels {
+            if allConnected {
+                core?.disconnect(id: tunnel.id)
+            } else if tunnel.status == .disconnected || tunnel.status == .error {
+                core?.connect(id: tunnel.id)
+            }
+        }
+    }
+
     // MARK: - SSH Terminal
 
     func openTerminal(id: String) {
@@ -214,7 +228,8 @@ final class TunnelViewModel: TunnelEventHandler {
                     localPort: old.localPort, remoteHost: old.remoteHost,
                     remotePort: old.remotePort, errorMessage: resolvedError,
                     authMethod: old.authMethod, jumpHostName: old.jumpHostName,
-                    showTrafficChart: old.showTrafficChart
+                    showTrafficChart: old.showTrafficChart,
+                    group: old.group
                 )
             } else {
                 tmLog("[TM] Tunnel \(id) not found in list, refreshing")
@@ -266,7 +281,8 @@ final class TunnelViewModel: TunnelEventHandler {
                     localPort: old.localPort, remoteHost: old.remoteHost,
                     remotePort: old.remotePort, errorMessage: message,
                     authMethod: old.authMethod, jumpHostName: old.jumpHostName,
-                    showTrafficChart: old.showTrafficChart
+                    showTrafficChart: old.showTrafficChart,
+                    group: old.group
                 )
             }
         }
