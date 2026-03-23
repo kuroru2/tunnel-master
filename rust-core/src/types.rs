@@ -207,7 +207,8 @@ mod tests {
             remote_port: 5432,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true, group: None,
+            show_traffic_chart: true,
+                    group: None,
         };
         let config = input.to_config("test".to_string());
         assert_eq!(config.id, "test");

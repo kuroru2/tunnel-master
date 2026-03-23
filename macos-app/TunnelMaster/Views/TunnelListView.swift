@@ -113,6 +113,7 @@ struct TunnelListView: View {
                                     name: group ?? "Ungrouped",
                                     tunnels: tunnels,
                                     isCollapsed: collapsedGroups.contains(group ?? ""),
+                                    isGrouped: group != nil,
                                     onToggleCollapse: {
                                         let key = group ?? ""
                                         if collapsedGroups.contains(key) {
@@ -175,6 +176,7 @@ struct GroupHeader: View {
     let name: String
     let tunnels: [TunnelInfo]
     let isCollapsed: Bool
+    let isGrouped: Bool
     let onToggleCollapse: () -> Void
     let onToggleGroup: () -> Void
 
@@ -205,14 +207,16 @@ struct GroupHeader: View {
 
             Spacer()
 
-            Button {
-                onToggleGroup()
-            } label: {
-                Text(connectedCount == tunnels.count ? "Stop All" : "Start All")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+            if isGrouped {
+                Button {
+                    onToggleGroup()
+                } label: {
+                    Text(connectedCount == tunnels.count ? "Stop All" : "Start All")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)

@@ -990,7 +990,8 @@ mod tests {
                     remote_port: 5432,
                     auto_connect: false,
                     jump_host: None,
-                    show_traffic_chart: true, group: None,
+                    show_traffic_chart: true,
+                    group: None,
                 },
                 TunnelConfig {
                     id: "redis".into(),
@@ -1006,7 +1007,8 @@ mod tests {
                     remote_port: 6379,
                     auto_connect: false,
                     jump_host: None,
-                    show_traffic_chart: true, group: None,
+                    show_traffic_chart: true,
+                    group: None,
                 },
             ],
             settings: Settings::default(),
@@ -1062,7 +1064,8 @@ mod tests {
             remote_port: 80,
             auto_connect: false,
             jump_host: None,
-            show_traffic_chart: true, group: None,
+            show_traffic_chart: true,
+                    group: None,
         });
 
         let (reply_tx, reply_rx) = oneshot::channel();

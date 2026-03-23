@@ -5,12 +5,15 @@ import os.log
 
 private let logger = Logger(subsystem: "com.kuroru2.tunnel-master", category: "ViewModel")
 
+private let logQueue = DispatchQueue(label: "com.kuroru2.tunnel-master.log", qos: .utility)
+
 private func tmLog(_ msg: String) {
     logger.info("\(msg)")
-    // Also write to file for debugging
-    let logFile = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".tunnel-master/swiftui.log")
     let line = "\(Date()): \(msg)\n"
-    if let data = line.data(using: .utf8) {
+    logQueue.async {
+        let logFile = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".tunnel-master/swiftui.log")
+        guard let data = line.data(using: .utf8) else { return }
         if FileManager.default.fileExists(atPath: logFile.path) {
             if let handle = try? FileHandle(forWritingTo: logFile) {
                 handle.seekToEndOfFile()
@@ -210,30 +213,16 @@ final class TunnelViewModel: TunnelEventHandler {
                 let old = self.tunnels[idx]
                 let resolvedError: String?
                 if status == .disconnected && errorMessage == nil && old.errorMessage != nil {
-                    // Preserve error when Rust clears it during cleanup
                     resolvedError = old.errorMessage
                 } else if status == .connected {
-                    // Clear error on successful connection
                     resolvedError = nil
                 } else if status == .connecting && errorMessage == nil {
-                    // Clear error on fresh user-initiated connect (not reconnect)
                     resolvedError = nil
                 } else {
-                    // Use whatever Rust sent (includes "Reconnecting (attempt N)...")
                     resolvedError = errorMessage
                 }
-                tmLog("[TM] Updating tunnel \(id): status=\(status) " +
-                      "resolvedError=\(resolvedError ?? "nil") oldError=\(old.errorMessage ?? "nil")")
-                self.tunnels[idx] = TunnelInfo(
-                    id: old.id, name: old.name, status: status,
-                    localPort: old.localPort, remoteHost: old.remoteHost,
-                    remotePort: old.remotePort, errorMessage: resolvedError,
-                    authMethod: old.authMethod, jumpHostName: old.jumpHostName,
-                    showTrafficChart: old.showTrafficChart,
-                    group: old.group
-                )
+                self.updateTunnelAt(idx, status: status, errorMessage: resolvedError)
             } else {
-                tmLog("[TM] Tunnel \(id) not found in list, refreshing")
                 self.refreshTunnels()
             }
         }
@@ -280,16 +269,22 @@ final class TunnelViewModel: TunnelEventHandler {
         tmLog("[TM] onError id=\(id) message=\(message)")
         Task { @MainActor in
             if let idx = self.tunnels.firstIndex(where: { $0.id == id }) {
-                let old = self.tunnels[idx]
-                self.tunnels[idx] = TunnelInfo(
-                    id: old.id, name: old.name, status: .error,
-                    localPort: old.localPort, remoteHost: old.remoteHost,
-                    remotePort: old.remotePort, errorMessage: message,
-                    authMethod: old.authMethod, jumpHostName: old.jumpHostName,
-                    showTrafficChart: old.showTrafficChart,
-                    group: old.group
-                )
+                self.updateTunnelAt(idx, status: .error, errorMessage: message)
             }
         }
+    }
+
+    // MARK: - Private helpers
+
+    /// Update a tunnel's status and error in-place, preserving all other fields.
+    private func updateTunnelAt(_ idx: Int, status: TunnelStatus, errorMessage: String?) {
+        let old = tunnels[idx]
+        tunnels[idx] = TunnelInfo(
+            id: old.id, name: old.name, status: status,
+            localPort: old.localPort, remoteHost: old.remoteHost,
+            remotePort: old.remotePort, errorMessage: errorMessage,
+            authMethod: old.authMethod, jumpHostName: old.jumpHostName,
+            showTrafficChart: old.showTrafficChart, group: old.group
+        )
     }
 }
