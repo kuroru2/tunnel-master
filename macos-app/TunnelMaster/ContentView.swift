@@ -33,8 +33,10 @@ struct ContentView: View {
                 HostKeyDialog(tunnelId: tid, host: host, port: port, keyType: keyType, fingerprint: fingerprint,
                              onAccept: viewModel.acceptHostKey, onCancel: viewModel.cancelDialog)
             case .keyboardInteractive(let tid, let name, let instructions, let prompts):
-                KeyboardInteractiveDialog(tunnelId: tid, name: name, instructions: instructions, prompts: prompts,
-                                         onSubmit: viewModel.respondKeyboardInteractive, onCancel: viewModel.cancelDialog)
+                KeyboardInteractiveDialog(
+                    tunnelId: tid, name: name, instructions: instructions, prompts: prompts,
+                    onSubmit: viewModel.respondKeyboardInteractive, onCancel: viewModel.cancelDialog
+                )
             }
         }
     }

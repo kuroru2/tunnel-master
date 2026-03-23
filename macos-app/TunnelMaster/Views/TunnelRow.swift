@@ -27,7 +27,10 @@ struct TunnelRow: View {
                         .lineLimit(1)
                     if let msg = tunnel.errorMessage, !msg.isEmpty {
                         HStack(spacing: 4) {
-                            Image(systemName: tunnel.status == .connecting ? "arrow.trianglehead.2.counterclockwise" : "exclamationmark.triangle.fill")
+                            let iconName = tunnel.status == .connecting
+                                ? "arrow.trianglehead.2.counterclockwise"
+                                : "exclamationmark.triangle.fill"
+                            Image(systemName: iconName)
                                 .font(.caption2)
                                 .foregroundStyle(tunnel.status == .connecting ? .yellow : .orange)
                             Text(msg)

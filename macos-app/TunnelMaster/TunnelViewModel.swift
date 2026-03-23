@@ -27,7 +27,7 @@ private func tmLog(_ msg: String) {
 final class TunnelViewModel: TunnelEventHandler {
     var tunnels: [TunnelInfo] = []
     var currentView: ViewMode = .list
-    var activeDialog: DialogState? = nil
+    var activeDialog: DialogState?
     var trafficHistory: [String: [TrafficSample]] = [:]
 
     private var core: TunnelCore?
@@ -178,7 +178,7 @@ final class TunnelViewModel: TunnelEventHandler {
 
     func acceptHostKey(host: String, port: UInt16) {
         // Save tunnelId before clearing dialog
-        var tunnelIdToReconnect: String? = nil
+        var tunnelIdToReconnect: String?
         if case .hostKey(let tid, _, _, _, _) = activeDialog {
             tunnelIdToReconnect = tid
         }
@@ -222,7 +222,8 @@ final class TunnelViewModel: TunnelEventHandler {
                     // Use whatever Rust sent (includes "Reconnecting (attempt N)...")
                     resolvedError = errorMessage
                 }
-                tmLog("[TM] Updating tunnel \(id): status=\(status) resolvedError=\(resolvedError ?? "nil") oldError=\(old.errorMessage ?? "nil")")
+                tmLog("[TM] Updating tunnel \(id): status=\(status) " +
+                      "resolvedError=\(resolvedError ?? "nil") oldError=\(old.errorMessage ?? "nil")")
                 self.tunnels[idx] = TunnelInfo(
                     id: old.id, name: old.name, status: status,
                     localPort: old.localPort, remoteHost: old.remoteHost,
@@ -252,13 +253,17 @@ final class TunnelViewModel: TunnelEventHandler {
 
     func onHostKeyVerification(id: String, host: String, port: UInt16, keyType: String, fingerprint: String) {
         Task { @MainActor in
-            self.activeDialog = .hostKey(tunnelId: id, host: host, port: port, keyType: keyType, fingerprint: fingerprint)
+            self.activeDialog = .hostKey(
+                tunnelId: id, host: host, port: port, keyType: keyType, fingerprint: fingerprint
+            )
         }
     }
 
     func onKeyboardInteractive(id: String, name: String, instructions: String, prompts: [KiPromptEntry]) {
         Task { @MainActor in
-            self.activeDialog = .keyboardInteractive(tunnelId: id, name: name, instructions: instructions, prompts: prompts)
+            self.activeDialog = .keyboardInteractive(
+                tunnelId: id, name: name, instructions: instructions, prompts: prompts
+            )
         }
     }
 

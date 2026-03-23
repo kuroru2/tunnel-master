@@ -11,14 +11,14 @@ struct EditFormView: View {
     @State private var user = ""
     @State private var authMethod: AuthMethod = .key
     @State private var keyPath = ""
-    @State private var jumpHost: String? = nil
+    @State private var jumpHost: String?
     @State private var localPort: UInt16 = 0
     @State private var remoteHost = ""
     @State private var remotePort: UInt16 = 0
     @State private var autoConnect = false
     @State private var showTrafficChart = true
     @State private var group = ""
-    @State private var error: String? = nil
+    @State private var error: String?
 
     var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
@@ -92,8 +92,8 @@ struct EditFormView: View {
                                     set: { jumpHost = $0.isEmpty ? nil : $0 }
                                 )) {
                                     Text("None").tag("")
-                                    ForEach(viewModel.tunnels.filter { $0.id != tunnelId }, id: \.id) { t in
-                                        Text(t.name).tag(t.id)
+                                    ForEach(viewModel.tunnels.filter { $0.id != tunnelId }, id: \.id) { tunnel in
+                                        Text(tunnel.name).tag(tunnel.id)
                                     }
                                 }
                             }
@@ -154,9 +154,9 @@ struct EditFormView: View {
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
         let existingIds = Set(viewModel.tunnels.map(\.id))
         if !existingIds.contains(slug) && !slug.isEmpty { return slug }
-        var n = 2
-        while existingIds.contains("\(slug)-\(n)") { n += 1 }
-        return slug.isEmpty ? "tunnel-\(n)" : "\(slug)-\(n)"
+        var counter = 2
+        while existingIds.contains("\(slug)-\(counter)") { counter += 1 }
+        return slug.isEmpty ? "tunnel-\(counter)" : "\(slug)-\(counter)"
     }
 
     private func pickKeyFile() {

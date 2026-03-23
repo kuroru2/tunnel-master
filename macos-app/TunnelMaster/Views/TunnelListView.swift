@@ -122,8 +122,8 @@ struct TunnelListView: View {
                                         }
                                     },
                                     onToggleGroup: {
-                                        if let g = group {
-                                            viewModel.toggleGroup(g)
+                                        if let groupName = group {
+                                            viewModel.toggleGroup(groupName)
                                         }
                                     }
                                 )

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct EditListView: View {
     @Bindable var viewModel: TunnelViewModel
-    @State private var confirmingDelete: String? = nil
+    @State private var confirmingDelete: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,8 +46,10 @@ struct EditListView: View {
                             Button { viewModel.currentView = .editForm(tunnelId: tunnel.id) } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(tunnel.name).font(.body).lineLimit(1)
-                                    Text("localhost:\(tunnel.localPort) \u{2192} \(tunnel.remoteHost):\(tunnel.remotePort)")
-                                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    Text("localhost:\(tunnel.localPort) → \(tunnel.remoteHost):\(tunnel.remotePort)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
                                 }
                             }.buttonStyle(.plain)
 
@@ -55,9 +57,9 @@ struct EditListView: View {
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                         }
                     }
-                    .onMove { from, to in
+                    .onMove { from, destination in
                         var ids = viewModel.tunnels.map(\.id)
-                        ids.move(fromOffsets: from, toOffset: to)
+                        ids.move(fromOffsets: from, toOffset: destination)
                         viewModel.reorderTunnels(ids: ids)
                     }
                 }.listStyle(.plain)

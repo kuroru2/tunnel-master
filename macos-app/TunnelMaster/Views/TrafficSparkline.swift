@@ -21,16 +21,18 @@ struct TrafficSparkline: View {
         }
     }
 
-    private func buildPath(samples: [TrafficSample], size: CGSize, maxVal: UInt64,
-                          getValue: (TrafficSample) -> UInt64) -> Path {
+    private func buildPath(samples: [TrafficSample],
+                           size: CGSize,
+                           maxVal: UInt64,
+                           getValue: (TrafficSample) -> UInt64) -> Path {
         Path { path in
             let step = size.width / CGFloat(maxPoints - 1)
             let startIndex = max(0, maxPoints - samples.count)
-            for (i, sample) in samples.enumerated() {
-                let x = CGFloat(startIndex + i) * step
-                let y = size.height - (CGFloat(getValue(sample)) / CGFloat(maxVal)) * (size.height - 4)
-                if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                else { path.addLine(to: CGPoint(x: x, y: y)) }
+            for (index, sample) in samples.enumerated() {
+                let xPos = CGFloat(startIndex + index) * step
+                let yPos = size.height - (CGFloat(getValue(sample)) / CGFloat(maxVal)) * (size.height - 4)
+                let point = CGPoint(x: xPos, y: yPos)
+                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
             }
         }
     }

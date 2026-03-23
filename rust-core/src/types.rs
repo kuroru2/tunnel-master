@@ -102,7 +102,7 @@ impl TunnelInput {
             auto_connect: self.auto_connect,
             jump_host: self.jump_host,
             show_traffic_chart: self.show_traffic_chart,
-            group: None,
+            group: self.group,
         }
     }
 }
