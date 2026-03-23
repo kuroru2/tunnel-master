@@ -29,9 +29,7 @@ impl HealthMonitor {
                 debug!("Connection alive for tunnel {}", tunnel_id);
             } else {
                 warn!("Connection lost for tunnel {}", tunnel_id);
-                let _ = death_tx
-                    .send("Connection lost".to_string())
-                    .await;
+                let _ = death_tx.send("Connection lost".to_string()).await;
                 break;
             }
         }

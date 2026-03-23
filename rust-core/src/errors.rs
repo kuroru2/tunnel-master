@@ -31,10 +31,7 @@ pub enum TunnelError {
     },
 
     #[error("HOST_KEY_CHANGED: Host key for {host}:{port} has changed! This could indicate a man-in-the-middle attack.")]
-    HostKeyChanged {
-        host: String,
-        port: u16,
-    },
+    HostKeyChanged { host: String, port: u16 },
 
     #[error("PASSWORD_REQUIRED:{0}")]
     PasswordRequired(String),

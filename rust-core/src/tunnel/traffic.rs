@@ -14,6 +14,12 @@ pub struct TrafficCounters {
     pub bytes_out: AtomicU64,
 }
 
+impl Default for TrafficCounters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrafficCounters {
     pub fn new() -> Self {
         Self {

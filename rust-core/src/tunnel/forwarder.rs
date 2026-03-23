@@ -65,9 +65,7 @@ impl PortForwarder {
                 }
                 Err(e) => {
                     error!("Accept error on port {}: {}", local_port, e);
-                    let _ = death_tx
-                        .send(format!("Listener error: {}", e))
-                        .await;
+                    let _ = death_tx.send(format!("Listener error: {}", e)).await;
                     break;
                 }
             }
@@ -88,8 +86,7 @@ impl PortForwarder {
             .open_direct_tcpip(remote_host, remote_port, "127.0.0.1", local_port)
             .await?;
 
-        let (mut channel_reader, mut channel_writer) =
-            tokio::io::split(channel.into_stream());
+        let (mut channel_reader, mut channel_writer) = tokio::io::split(channel.into_stream());
         let (mut tcp_reader, mut tcp_writer) = tokio::io::split(tcp_stream);
 
         // Bidirectional pipe with byte counting

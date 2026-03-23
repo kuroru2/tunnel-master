@@ -1,0 +1,31 @@
+#!/bin/bash
+# Pre-commit hook: runs Rust and Swift linters
+set -e
+
+echo "==> Running cargo fmt check..."
+cd rust-core
+cargo fmt --check 2>&1 || {
+    echo "ERROR: cargo fmt failed. Run 'cd rust-core && cargo fmt' to fix."
+    exit 1
+}
+
+echo "==> Running cargo clippy..."
+cargo clippy --lib -- -D warnings 2>&1 || {
+    echo "ERROR: cargo clippy found warnings. Fix them before committing."
+    exit 1
+}
+
+echo "==> Running SwiftLint..."
+cd ../macos-app
+if command -v swiftlint &>/dev/null; then
+    ERRORS=$(swiftlint lint TunnelMaster/ --quiet 2>&1 | grep "error:" || true)
+    if [ -n "$ERRORS" ]; then
+        echo "$ERRORS"
+        echo "ERROR: SwiftLint found errors. Fix them before committing."
+        exit 1
+    fi
+else
+    echo "SKIP: swiftlint not installed (brew install swiftlint)"
+fi
+
+echo "==> All checks passed."

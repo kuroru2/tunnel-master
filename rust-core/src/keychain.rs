@@ -35,7 +35,10 @@ pub fn get_password(tunnel_id: &str) -> Option<String> {
     let entry = keyring::Entry::new(SERVICE_NAME, &key).ok()?;
     match entry.get_password() {
         Ok(password) => {
-            debug!("Retrieved password from credential store for tunnel {}", tunnel_id);
+            debug!(
+                "Retrieved password from credential store for tunnel {}",
+                tunnel_id
+            );
             Some(password)
         }
         Err(keyring::Error::NoEntry) => {

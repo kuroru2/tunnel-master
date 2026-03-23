@@ -82,8 +82,12 @@ pub struct TunnelInput {
     pub group: Option<String>,
 }
 
-fn default_ssh_port() -> u16 { 22 }
-fn default_true() -> bool { true }
+fn default_ssh_port() -> u16 {
+    22
+}
+fn default_true() -> bool {
+    true
+}
 
 impl TunnelInput {
     pub fn to_config(self, id: String) -> TunnelConfig {
@@ -120,9 +124,15 @@ pub struct Settings {
     pub launch_at_login: bool,
 }
 
-fn default_keepalive_interval() -> u64 { 15 }
-fn default_keepalive_timeout() -> u64 { 30 }
-fn default_connection_timeout() -> u64 { 10 }
+fn default_keepalive_interval() -> u64 {
+    15
+}
+fn default_keepalive_timeout() -> u64 {
+    30
+}
+fn default_connection_timeout() -> u64 {
+    10
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -208,7 +218,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         };
         let config = input.to_config("test".to_string());
         assert_eq!(config.id, "test");

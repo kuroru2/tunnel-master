@@ -84,11 +84,7 @@ impl client::Handler for SshClientHandler {
         &mut self,
         server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        match russh_keys::known_hosts::check_known_hosts(
-            &self.host,
-            self.port,
-            server_public_key,
-        ) {
+        match russh_keys::known_hosts::check_known_hosts(&self.host, self.port, server_public_key) {
             Ok(true) => {
                 debug!("Host key verified for {}:{}", self.host, self.port);
                 Ok(true)
@@ -114,7 +110,10 @@ impl client::Handler for SshClientHandler {
                 Ok(false)
             }
             Err(e) => {
-                warn!("Known hosts check error for {}:{}: {}", self.host, self.port, e);
+                warn!(
+                    "Known hosts check error for {}:{}: {}",
+                    self.host, self.port, e
+                );
                 // Fail safe — treat as unknown
                 *self.check_result.lock().unwrap() =
                     Some(HostKeyCheckResult::Unknown(server_public_key.clone()));
@@ -122,7 +121,6 @@ impl client::Handler for SshClientHandler {
             }
         }
     }
-
 }
 
 impl SshConnection {
@@ -234,10 +232,7 @@ impl SshConnection {
                     let key_type = pubkey.name().to_string();
                     // Store for later acceptance
                     let map_key = format!("{}:{}", host, port);
-                    PENDING_HOST_KEYS
-                        .lock()
-                        .unwrap()
-                        .insert(map_key, pubkey);
+                    PENDING_HOST_KEYS.lock().unwrap().insert(map_key, pubkey);
                     return Err(TunnelError::HostKeyUnknown {
                         host: host.to_string(),
                         port,
@@ -253,10 +248,7 @@ impl SshConnection {
                 }
             }
         }
-        Err(TunnelError::SshError(format!(
-            "Connection failed: {}",
-            e
-        )))
+        Err(TunnelError::SshError(format!("Connection failed: {}", e)))
     }
 
     /// Dispatch authentication based on the credential type.
@@ -333,10 +325,13 @@ impl SshConnection {
                                 tunnel_id.clone(),
                                 name,
                                 instructions,
-                                prompts.iter().map(|p| KiPromptEntry {
-                                    text: p.prompt.clone(),
-                                    echo: p.echo,
-                                }).collect(),
+                                prompts
+                                    .iter()
+                                    .map(|p| KiPromptEntry {
+                                        text: p.prompt.clone(),
+                                        echo: p.echo,
+                                    })
+                                    .collect(),
                             );
 
                             let answers = rx.await.map_err(|_| {
@@ -404,9 +399,7 @@ impl SshConnection {
                     break;
                 }
                 Ok(false) => continue,
-                Err(e) => {
-                    return Err(TunnelError::AuthFailed(format!("Agent auth error: {}", e)))
-                }
+                Err(e) => return Err(TunnelError::AuthFailed(format!("Agent auth error: {}", e))),
             }
         }
 

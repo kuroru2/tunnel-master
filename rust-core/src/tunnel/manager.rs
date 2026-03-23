@@ -173,9 +173,11 @@ impl TunnelManagerActor {
 
     /// Build a TunnelInfo from a TunnelState, resolving the jump host name
     fn tunnel_to_info(&self, tunnel: &TunnelState) -> TunnelInfo {
-        let jump_host_name = tunnel.config.jump_host.as_ref().and_then(|jump_id| {
-            self.tunnels.get(jump_id).map(|jt| jt.config.name.clone())
-        });
+        let jump_host_name = tunnel
+            .config
+            .jump_host
+            .as_ref()
+            .and_then(|jump_id| self.tunnels.get(jump_id).map(|jt| jt.config.name.clone()));
         TunnelInfo {
             id: tunnel.config.id.clone(),
             name: tunnel.config.name.clone(),
@@ -209,9 +211,10 @@ impl TunnelManagerActor {
                         return Err(TunnelError::JumpHostNotFound(jump_id));
                     }
                     if !visited.insert(jump_id.clone()) {
-                        return Err(TunnelError::ConfigInvalid(
-                            format!("Jump host chain contains a loop involving '{}'", jump_id),
-                        ));
+                        return Err(TunnelError::ConfigInvalid(format!(
+                            "Jump host chain contains a loop involving '{}'",
+                            jump_id
+                        )));
                     }
                     current_id = jump_id;
                 }
@@ -224,26 +227,25 @@ impl TunnelManagerActor {
 
     /// Build AuthCredentials from a tunnel's auth_method
     fn build_credentials(&mut self, tunnel_id: &str) -> Result<AuthCredentials, TunnelError> {
-        let tunnel = self.tunnels.get(tunnel_id)
+        let tunnel = self
+            .tunnels
+            .get(tunnel_id)
             .ok_or_else(|| TunnelError::TunnelNotFound(tunnel_id.to_string()))?;
 
         match &tunnel.config.auth_method {
             AuthMethod::Key => {
                 let expanded_key_path = ConfigStore::expand_tilde(&tunnel.config.key_path);
-                let passphrase = keychain::get_passphrase(
-                    expanded_key_path.to_string_lossy().as_ref(),
-                );
+                let passphrase =
+                    keychain::get_passphrase(expanded_key_path.to_string_lossy().as_ref());
                 Ok(AuthCredentials::Key {
                     key_path: tunnel.config.key_path.clone(),
                     passphrase,
                 })
             }
-            AuthMethod::Password => {
-                match keychain::get_password(tunnel_id) {
-                    Some(password) => Ok(AuthCredentials::Password(password)),
-                    None => Err(TunnelError::PasswordRequired(tunnel_id.to_string())),
-                }
-            }
+            AuthMethod::Password => match keychain::get_password(tunnel_id) {
+                Some(password) => Ok(AuthCredentials::Password(password)),
+                None => Err(TunnelError::PasswordRequired(tunnel_id.to_string())),
+            },
             AuthMethod::Agent => Ok(AuthCredentials::Agent),
             AuthMethod::KeyboardInteractive => {
                 let ki_slot: KiResponseSlot = Arc::new(std::sync::Mutex::new(None));
@@ -269,7 +271,11 @@ impl TunnelManagerActor {
         let jump_credentials = self.build_credentials(jump_id)?;
         let (jump_host, jump_port, jump_user) = {
             let jt = self.tunnels.get(jump_id).unwrap();
-            (jt.config.host.clone(), jt.config.port, jt.config.user.clone())
+            (
+                jt.config.host.clone(),
+                jt.config.port,
+                jt.config.user.clone(),
+            )
         };
 
         let timeout_secs = self.settings.connection_timeout_secs;
@@ -282,7 +288,9 @@ impl TunnelManagerActor {
             timeout_secs,
         )
         .await
-        .map_err(|e| TunnelError::JumpHostFailed(format!("Failed to connect to jump host: {}", e)))?;
+        .map_err(|e| {
+            TunnelError::JumpHostFailed(format!("Failed to connect to jump host: {}", e))
+        })?;
 
         let jump_ssh = Arc::new(jump_ssh);
 
@@ -295,7 +303,12 @@ impl TunnelManagerActor {
         let channel = jump_ssh
             .open_direct_tcpip(&dest_host, dest_port, "127.0.0.1", 0)
             .await
-            .map_err(|e| TunnelError::JumpHostFailed(format!("Failed to open channel through jump host: {}", e)))?;
+            .map_err(|e| {
+                TunnelError::JumpHostFailed(format!(
+                    "Failed to open channel through jump host: {}",
+                    e
+                ))
+            })?;
 
         let stream = channel.into_stream();
 
@@ -325,7 +338,9 @@ impl TunnelManagerActor {
         while let Some(cmd) = rx.recv().await {
             match cmd {
                 ManagerCommand::ListTunnels { reply } => {
-                    let infos: Vec<TunnelInfo> = self.tunnel_order.iter()
+                    let infos: Vec<TunnelInfo> = self
+                        .tunnel_order
+                        .iter()
                         .filter_map(|id| self.tunnels.get(id).map(|t| self.tunnel_to_info(t)))
                         .collect();
                     let _ = reply.send(infos);
@@ -363,7 +378,11 @@ impl TunnelManagerActor {
                     let _ = reply.send(result);
                 }
 
-                ManagerCommand::TunnelDied { id, error, generation } => {
+                ManagerCommand::TunnelDied {
+                    id,
+                    error,
+                    generation,
+                } => {
                     self.handle_tunnel_died(&id, &error, generation).await;
                 }
 
@@ -390,7 +409,11 @@ impl TunnelManagerActor {
                     let _ = reply.send(result);
                 }
 
-                ManagerCommand::RespondKeyboardInteractive { id, responses, reply } => {
+                ManagerCommand::RespondKeyboardInteractive {
+                    id,
+                    responses,
+                    reply,
+                } => {
                     let result = self.handle_respond_ki(&id, responses);
                     let _ = reply.send(result);
                 }
@@ -430,7 +453,9 @@ impl TunnelManagerActor {
     }
 
     fn handle_respond_ki(&mut self, id: &str, responses: Vec<String>) -> Result<(), TunnelError> {
-        let tunnel = self.tunnels.get_mut(id)
+        let tunnel = self
+            .tunnels
+            .get_mut(id)
             .ok_or_else(|| TunnelError::TunnelNotFound(id.to_string()))?;
 
         if let Some(ki_slot) = &tunnel.ki_slot {
@@ -438,15 +463,21 @@ impl TunnelManagerActor {
                 let _ = tx.send(responses);
                 Ok(())
             } else {
-                Err(TunnelError::SshError("No pending keyboard-interactive prompt".to_string()))
+                Err(TunnelError::SshError(
+                    "No pending keyboard-interactive prompt".to_string(),
+                ))
             }
         } else {
-            Err(TunnelError::SshError("No keyboard-interactive session active".to_string()))
+            Err(TunnelError::SshError(
+                "No keyboard-interactive session active".to_string(),
+            ))
         }
     }
 
     fn handle_cancel_ki(&mut self, id: &str) -> Result<(), TunnelError> {
-        let tunnel = self.tunnels.get_mut(id)
+        let tunnel = self
+            .tunnels
+            .get_mut(id)
             .ok_or_else(|| TunnelError::TunnelNotFound(id.to_string()))?;
 
         // Drop the ki_slot, which will cause the oneshot receiver to get a RecvError
@@ -462,12 +493,21 @@ impl TunnelManagerActor {
         };
         let attempts = tunnel.reconnect_attempts;
         let delay_secs = std::cmp::min(2u64.saturating_pow(attempts), 60);
-        info!("Scheduling reconnect for {} in {}s (attempt {})", id, delay_secs, attempts + 1);
+        info!(
+            "Scheduling reconnect for {} in {}s (attempt {})",
+            id,
+            delay_secs,
+            attempts + 1
+        );
 
         // Show reconnect status immediately during the wait
         {
             let tunnel = self.tunnels.get_mut(id).unwrap();
-            tunnel.error_message = Some(format!("Reconnecting in {}s (attempt {})...", delay_secs, attempts + 1));
+            tunnel.error_message = Some(format!(
+                "Reconnecting in {}s (attempt {})...",
+                delay_secs,
+                attempts + 1
+            ));
         }
         self.emit_status(id, &TunnelStatus::Connecting);
 
@@ -476,10 +516,12 @@ impl TunnelManagerActor {
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
             let (tx, _rx) = tokio::sync::oneshot::channel();
-            let _ = manager_tx.send(ManagerCommand::Connect {
-                id: tunnel_id,
-                reply: tx,
-            }).await;
+            let _ = manager_tx
+                .send(ManagerCommand::Connect {
+                    id: tunnel_id,
+                    reply: tx,
+                })
+                .await;
         });
     }
 
@@ -492,8 +534,7 @@ impl TunnelManagerActor {
                 .get_mut(id)
                 .ok_or_else(|| TunnelError::TunnelNotFound(id.to_string()))?;
 
-            if tunnel.status == TunnelStatus::Connected
-                || tunnel.status == TunnelStatus::Connecting
+            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting
             {
                 debug!("Tunnel {} already connected/connecting", id);
                 return Ok(());
@@ -502,7 +543,10 @@ impl TunnelManagerActor {
             is_reconnecting = tunnel.was_connected && tunnel.reconnect_attempts > 0;
             tunnel.status = TunnelStatus::Connecting;
             if is_reconnecting {
-                tunnel.error_message = Some(format!("Reconnecting (attempt {})...", tunnel.reconnect_attempts));
+                tunnel.error_message = Some(format!(
+                    "Reconnecting (attempt {})...",
+                    tunnel.reconnect_attempts
+                ));
             } else {
                 tunnel.error_message = None;
             }
@@ -564,7 +608,11 @@ impl TunnelManagerActor {
 
             let (host, port, user) = {
                 let tunnel = self.tunnels.get(id).unwrap();
-                (tunnel.config.host.clone(), tunnel.config.port, tunnel.config.user.clone())
+                (
+                    tunnel.config.host.clone(),
+                    tunnel.config.port,
+                    tunnel.config.user.clone(),
+                )
             };
 
             match SshConnection::connect(&host, port, &user, credentials, timeout_secs).await {
@@ -628,7 +676,9 @@ impl TunnelManagerActor {
             .await
             {
                 warn!("Port forwarder exited with error: {}", e);
-                let _ = fwd_death_tx.send(format!("Port forwarder failed: {}", e)).await;
+                let _ = fwd_death_tx
+                    .send(format!("Port forwarder failed: {}", e))
+                    .await;
             }
         });
 
@@ -746,7 +796,7 @@ impl TunnelManagerActor {
 
         warn!("Tunnel {} died: {}", id, error);
 
-        let should_reconnect = self.tunnels.get(id).map_or(false, |t| t.was_connected);
+        let should_reconnect = self.tunnels.get(id).is_some_and(|t| t.was_connected);
 
         {
             let tunnel = self.tunnels.get_mut(id).unwrap();
@@ -786,9 +836,10 @@ impl TunnelManagerActor {
 
     fn handle_add_tunnel(&mut self, config: TunnelConfig) -> Result<TunnelInfo, TunnelError> {
         if self.tunnels.contains_key(&config.id) {
-            return Err(TunnelError::ConfigInvalid(
-                format!("Tunnel '{}' already exists", config.id),
-            ));
+            return Err(TunnelError::ConfigInvalid(format!(
+                "Tunnel '{}' already exists",
+                config.id
+            )));
         }
         let state = TunnelState::new(config);
         let info = self.tunnel_to_info(&state);
@@ -798,12 +849,16 @@ impl TunnelManagerActor {
         Ok(info)
     }
 
-    async fn handle_update_tunnel(&mut self, config: TunnelConfig) -> Result<TunnelInfo, TunnelError> {
+    async fn handle_update_tunnel(
+        &mut self,
+        config: TunnelConfig,
+    ) -> Result<TunnelInfo, TunnelError> {
         let id = config.id.clone();
 
         // Disconnect if currently connected
         if let Some(tunnel) = self.tunnels.get(&id) {
-            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting {
+            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting
+            {
                 info!("Disconnecting tunnel '{}' before update", id);
                 self.handle_disconnect(&id).await.ok();
             }
@@ -823,24 +878,28 @@ impl TunnelManagerActor {
     async fn handle_remove_tunnel(&mut self, id: &str) -> Result<(), TunnelError> {
         // Disconnect if currently connected
         if let Some(tunnel) = self.tunnels.get(id) {
-            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting {
+            if tunnel.status == TunnelStatus::Connected || tunnel.status == TunnelStatus::Connecting
+            {
                 info!("Disconnecting tunnel '{}' before removal", id);
                 self.handle_disconnect(id).await.ok();
             }
         }
 
         // Find tunnels that use this one as a jump host and disconnect them
-        let dependent_ids: Vec<String> = self.tunnels.iter()
-            .filter(|(tid, t)| {
-                *tid != id && t.config.jump_host.as_deref() == Some(id)
-            })
+        let dependent_ids: Vec<String> = self
+            .tunnels
+            .iter()
+            .filter(|(tid, t)| *tid != id && t.config.jump_host.as_deref() == Some(id))
             .map(|(tid, _)| tid.clone())
             .collect();
 
         for dep_id in &dependent_ids {
             if let Some(t) = self.tunnels.get(dep_id) {
                 if t.status == TunnelStatus::Connected || t.status == TunnelStatus::Connecting {
-                    info!("Disconnecting dependent tunnel '{}' before removing jump host '{}'", dep_id, id);
+                    info!(
+                        "Disconnecting dependent tunnel '{}' before removing jump host '{}'",
+                        dep_id, id
+                    );
                     self.handle_disconnect(dep_id).await.ok();
                 }
             }
@@ -939,23 +998,21 @@ impl TunnelManagerActor {
 
     fn emit_status(&self, id: &str, status: &TunnelStatus) {
         let error_message = self.tunnels.get(id).and_then(|t| t.error_message.clone());
-        self.event_handler.on_tunnel_state_changed(
-            id.to_string(),
-            status.clone(),
-            error_message,
-        );
+        self.event_handler
+            .on_tunnel_state_changed(id.to_string(), status.clone(), error_message);
     }
 
     fn emit_error(&self, id: &str, message: &str, _code: &str) {
-        self.event_handler.on_error(id.to_string(), message.to_string());
+        self.event_handler
+            .on_error(id.to_string(), message.to_string());
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{TunnelEventHandler, KiPromptEntry};
-    use crate::types::{AuthMethod, Settings, TunnelType, TrafficSample};
+    use crate::events::{KiPromptEntry, TunnelEventHandler};
+    use crate::types::{AuthMethod, Settings, TrafficSample, TunnelType};
 
     struct NoopEventHandler;
     impl TunnelEventHandler for NoopEventHandler {
@@ -1026,7 +1083,9 @@ mod tests {
 
         let tunnels = reply_rx.await.unwrap();
         assert_eq!(tunnels.len(), 2);
-        assert!(tunnels.iter().all(|t| t.status == TunnelStatus::Disconnected));
+        assert!(tunnels
+            .iter()
+            .all(|t| t.status == TunnelStatus::Disconnected));
     }
 
     #[tokio::test]
@@ -1065,7 +1124,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         });
 
         let (reply_tx, reply_rx) = oneshot::channel();
@@ -1106,7 +1165,10 @@ mod tests {
             .await
             .unwrap();
         let result = reply_rx.await.unwrap();
-        assert!(result.is_err(), "Expected error connecting to unreachable host");
+        assert!(
+            result.is_err(),
+            "Expected error connecting to unreachable host"
+        );
 
         // Verify tunnel is back to Disconnected with an error message
         let (reply_tx, reply_rx) = oneshot::channel();
@@ -1117,6 +1179,9 @@ mod tests {
         let tunnels = reply_rx.await.unwrap();
         let db = tunnels.iter().find(|t| t.id == "db").unwrap();
         assert_eq!(db.status, TunnelStatus::Disconnected);
-        assert!(db.error_message.is_some(), "Expected error_message to be set");
+        assert!(
+            db.error_message.is_some(),
+            "Expected error_message to be set"
+        );
     }
 }

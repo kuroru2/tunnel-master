@@ -81,8 +81,9 @@ impl ConfigStore {
     pub fn save(&self, config: &AppConfig) -> Result<(), TunnelError> {
         // Ensure parent directory exists
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| TunnelError::ConfigInvalid(format!("Cannot create config dir: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                TunnelError::ConfigInvalid(format!("Cannot create config dir: {}", e))
+            })?;
         }
 
         let json = serde_json::to_string_pretty(config)
@@ -100,9 +101,9 @@ impl ConfigStore {
     }
 
     pub fn expand_tilde(path: &str) -> PathBuf {
-        if path.starts_with("~/") {
+        if let Some(stripped) = path.strip_prefix("~/") {
             if let Some(home) = dirs::home_dir() {
-                return home.join(&path[2..]);
+                return home.join(stripped);
             }
         }
         PathBuf::from(path)
@@ -126,16 +127,24 @@ pub fn validate_tunnel_input(
         return Err(TunnelError::ConfigInvalid("user is required".to_string()));
     }
     if input.port == 0 {
-        return Err(TunnelError::ConfigInvalid("port must be 1-65535".to_string()));
+        return Err(TunnelError::ConfigInvalid(
+            "port must be 1-65535".to_string(),
+        ));
     }
     if input.local_port == 0 {
-        return Err(TunnelError::ConfigInvalid("localPort must be 1-65535".to_string()));
+        return Err(TunnelError::ConfigInvalid(
+            "localPort must be 1-65535".to_string(),
+        ));
     }
     if input.remote_host.trim().is_empty() {
-        return Err(TunnelError::ConfigInvalid("remoteHost is required".to_string()));
+        return Err(TunnelError::ConfigInvalid(
+            "remoteHost is required".to_string(),
+        ));
     }
     if input.remote_port == 0 {
-        return Err(TunnelError::ConfigInvalid("remotePort must be 1-65535".to_string()));
+        return Err(TunnelError::ConfigInvalid(
+            "remotePort must be 1-65535".to_string(),
+        ));
     }
 
     // Check localPort conflict with other tunnels
@@ -146,9 +155,10 @@ pub fn validate_tunnel_input(
                     continue;
                 }
             }
-            return Err(TunnelError::ConfigInvalid(
-                format!("localPort {} is already used by tunnel '{}'", input.local_port, id),
-            ));
+            return Err(TunnelError::ConfigInvalid(format!(
+                "localPort {} is already used by tunnel '{}'",
+                input.local_port, id
+            )));
         }
     }
 
@@ -161,9 +171,10 @@ pub fn validate_tunnel_input(
         }
         let expanded = ConfigStore::expand_tilde(&input.key_path);
         if !expanded.exists() {
-            return Err(TunnelError::ConfigInvalid(
-                format!("keyPath '{}' does not exist", input.key_path),
-            ));
+            return Err(TunnelError::ConfigInvalid(format!(
+                "keyPath '{}' does not exist",
+                input.key_path
+            )));
         }
     }
 
@@ -334,7 +345,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         };
         assert!(validate_tunnel_input(&input, &[], None).is_ok());
     }
@@ -354,7 +365,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("Key path is required"));
@@ -375,7 +386,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("name"));
@@ -396,7 +407,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         };
         let existing = vec![("other".to_string(), 5432u16)];
         let err = validate_tunnel_input(&input, &existing, None).unwrap_err();
@@ -418,7 +429,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         };
         let existing = vec![("self-id".to_string(), 5432u16)];
         assert!(validate_tunnel_input(&input, &existing, Some("self-id")).is_ok());
@@ -439,7 +450,7 @@ mod tests {
             auto_connect: false,
             jump_host: None,
             show_traffic_chart: true,
-                    group: None,
+            group: None,
         };
         let err = validate_tunnel_input(&input, &[], None).unwrap_err();
         assert!(err.to_string().contains("localPort"));

@@ -5,7 +5,7 @@ use crate::config::store::ConfigStore;
 use crate::events::TunnelEventHandler;
 use crate::keychain;
 use crate::tunnel::connection::accept_pending_host_key;
-use crate::tunnel::manager::{ManagerCommand, ManagerHandle, spawn_manager};
+use crate::tunnel::manager::{spawn_manager, ManagerCommand, ManagerHandle};
 use crate::types::{AppConfig, TrafficSample, TunnelConfig, TunnelInfo};
 
 #[derive(uniffi::Object)]
@@ -31,13 +31,12 @@ impl TunnelCore {
                 .try_init();
         }
 
-        let runtime = tokio::runtime::Handle::try_current()
-            .unwrap_or_else(|_| {
-                let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
-                let handle = rt.handle().clone();
-                std::thread::spawn(move || rt.block_on(std::future::pending::<()>()));
-                handle
-            });
+        let runtime = tokio::runtime::Handle::try_current().unwrap_or_else(|_| {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+            let handle = rt.handle().clone();
+            std::thread::spawn(move || rt.block_on(std::future::pending::<()>()));
+            handle
+        });
 
         let config_store = ConfigStore::new(ConfigStore::default_path());
         let config = config_store.load().unwrap_or_else(|_| AppConfig {
@@ -46,9 +45,7 @@ impl TunnelCore {
             settings: crate::types::Settings::default(),
         });
 
-        let manager = runtime.block_on(async {
-            spawn_manager(config, event_handler)
-        });
+        let manager = runtime.block_on(async { spawn_manager(config, event_handler) });
 
         Self {
             manager,
@@ -60,16 +57,21 @@ impl TunnelCore {
     pub fn list_tunnels(&self) -> Vec<TunnelInfo> {
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            self.manager.send(ManagerCommand::ListTunnels { reply: tx }).await
+            self.manager
+                .send(ManagerCommand::ListTunnels { reply: tx })
+                .await
         });
-        self.runtime.block_on(async { rx.await.unwrap_or_default() })
+        self.runtime
+            .block_on(async { rx.await.unwrap_or_default() })
     }
 
     pub fn connect(&self, id: String) {
         let manager = self.manager.clone();
         self.runtime.spawn(async move {
             let (tx, rx) = oneshot::channel();
-            let _ = manager.send(ManagerCommand::Connect { id, reply: tx }).await;
+            let _ = manager
+                .send(ManagerCommand::Connect { id, reply: tx })
+                .await;
             let _ = rx.await;
         });
     }
@@ -78,7 +80,9 @@ impl TunnelCore {
         let manager = self.manager.clone();
         self.runtime.spawn(async move {
             let (tx, rx) = oneshot::channel();
-            let _ = manager.send(ManagerCommand::Disconnect { id, reply: tx }).await;
+            let _ = manager
+                .send(ManagerCommand::Disconnect { id, reply: tx })
+                .await;
             let _ = rx.await;
         });
     }
@@ -86,9 +90,12 @@ impl TunnelCore {
     pub fn get_tunnel_config(&self, id: String) -> Option<TunnelConfig> {
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            self.manager.send(ManagerCommand::GetTunnelConfig { id, reply: tx }).await
+            self.manager
+                .send(ManagerCommand::GetTunnelConfig { id, reply: tx })
+                .await
         });
-        self.runtime.block_on(async { rx.await.ok().and_then(|r| r.ok()) })
+        self.runtime
+            .block_on(async { rx.await.ok().and_then(|r| r.ok()) })
     }
 
     pub fn add_tunnel(&self, config: TunnelConfig) {
@@ -102,9 +109,11 @@ impl TunnelCore {
         let manager = self.manager.clone();
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            manager.send(ManagerCommand::AddTunnel { config, reply: tx }).await
+            manager
+                .send(ManagerCommand::AddTunnel { config, reply: tx })
+                .await
         });
-        let _ = self.runtime.block_on(async { rx.await });
+        let _ = self.runtime.block_on(rx);
     }
 
     pub fn update_tunnel(&self, id: String, config: TunnelConfig) {
@@ -120,9 +129,11 @@ impl TunnelCore {
         let manager = self.manager.clone();
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            manager.send(ManagerCommand::UpdateTunnel { config, reply: tx }).await
+            manager
+                .send(ManagerCommand::UpdateTunnel { config, reply: tx })
+                .await
         });
-        let _ = self.runtime.block_on(async { rx.await });
+        let _ = self.runtime.block_on(rx);
     }
 
     pub fn delete_tunnel(&self, id: String) {
@@ -136,9 +147,11 @@ impl TunnelCore {
         let manager = self.manager.clone();
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            manager.send(ManagerCommand::RemoveTunnel { id, reply: tx }).await
+            manager
+                .send(ManagerCommand::RemoveTunnel { id, reply: tx })
+                .await
         });
-        let _ = self.runtime.block_on(async { rx.await });
+        let _ = self.runtime.block_on(rx);
     }
 
     pub fn reorder_tunnels(&self, ids: Vec<String>) {
@@ -158,9 +171,11 @@ impl TunnelCore {
         let manager = self.manager.clone();
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            manager.send(ManagerCommand::ReorderTunnels { ids, reply: tx }).await
+            manager
+                .send(ManagerCommand::ReorderTunnels { ids, reply: tx })
+                .await
         });
-        let _ = self.runtime.block_on(async { rx.await });
+        let _ = self.runtime.block_on(rx);
     }
 
     pub fn reload_config(&self) {
@@ -169,20 +184,23 @@ impl TunnelCore {
             let manager = self.manager.clone();
             let (tx, rx) = oneshot::channel();
             let _ = self.runtime.block_on(async {
-                manager.send(ManagerCommand::ReloadConfig { config, reply: tx }).await
+                manager
+                    .send(ManagerCommand::ReloadConfig { config, reply: tx })
+                    .await
             });
-            let _ = self.runtime.block_on(async { rx.await });
+            let _ = self.runtime.block_on(rx);
         }
     }
 
     pub fn get_traffic_history(&self, id: String) -> Vec<TrafficSample> {
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            self.manager.send(ManagerCommand::GetTrafficHistory { id, reply: tx }).await
+            self.manager
+                .send(ManagerCommand::GetTrafficHistory { id, reply: tx })
+                .await
         });
-        self.runtime.block_on(async {
-            rx.await.ok().and_then(|r| r.ok()).unwrap_or_default()
-        })
+        self.runtime
+            .block_on(async { rx.await.ok().and_then(|r| r.ok()).unwrap_or_default() })
     }
 
     pub fn accept_host_key(&self, host: String, port: u16) {
@@ -206,22 +224,26 @@ impl TunnelCore {
         let manager = self.manager.clone();
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            manager.send(ManagerCommand::RespondKeyboardInteractive {
-                id, responses, reply: tx,
-            }).await
+            manager
+                .send(ManagerCommand::RespondKeyboardInteractive {
+                    id,
+                    responses,
+                    reply: tx,
+                })
+                .await
         });
-        let _ = self.runtime.block_on(async { rx.await });
+        let _ = self.runtime.block_on(rx);
     }
 
     pub fn cancel_auth(&self, id: String) {
         let manager = self.manager.clone();
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            manager.send(ManagerCommand::CancelKeyboardInteractive {
-                id, reply: tx,
-            }).await
+            manager
+                .send(ManagerCommand::CancelKeyboardInteractive { id, reply: tx })
+                .await
         });
-        let _ = self.runtime.block_on(async { rx.await });
+        let _ = self.runtime.block_on(rx);
     }
 
     pub fn store_passphrase(&self, id: String, passphrase: String) {
@@ -242,10 +264,10 @@ impl TunnelCore {
     pub fn shutdown(&self) {
         let manager = self.manager.clone();
         let (tx, rx) = oneshot::channel();
-        let _ = self.runtime.block_on(async {
-            manager.send(ManagerCommand::Shutdown { reply: tx }).await
-        });
-        let _ = self.runtime.block_on(async { rx.await });
+        let _ = self
+            .runtime
+            .block_on(async { manager.send(ManagerCommand::Shutdown { reply: tx }).await });
+        let _ = self.runtime.block_on(rx);
     }
 }
 
@@ -253,13 +275,14 @@ impl TunnelCore {
     fn get_key_path(&self, id: &str) -> Option<String> {
         let (tx, rx) = oneshot::channel();
         let _ = self.runtime.block_on(async {
-            self.manager.send(ManagerCommand::GetKeyPath {
-                id: id.to_string(),
-                reply: tx,
-            }).await
+            self.manager
+                .send(ManagerCommand::GetKeyPath {
+                    id: id.to_string(),
+                    reply: tx,
+                })
+                .await
         });
-        self.runtime.block_on(async {
-            rx.await.ok().and_then(|r| r.ok())
-        })
+        self.runtime
+            .block_on(async { rx.await.ok().and_then(|r| r.ok()) })
     }
 }

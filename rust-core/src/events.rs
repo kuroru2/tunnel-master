@@ -15,10 +15,22 @@ pub struct KiPromptEntry {
 /// and MUST NOT synchronously call back into Rust (deadlock risk).
 #[uniffi::export(with_foreign)]
 pub trait TunnelEventHandler: Send + Sync {
-    fn on_tunnel_state_changed(&self, id: String, status: TunnelStatus, error_message: Option<String>);
+    fn on_tunnel_state_changed(
+        &self,
+        id: String,
+        status: TunnelStatus,
+        error_message: Option<String>,
+    );
     fn on_passphrase_requested(&self, id: String, key_path: String);
     fn on_password_requested(&self, id: String);
-    fn on_host_key_verification(&self, id: String, host: String, port: u16, key_type: String, fingerprint: String);
+    fn on_host_key_verification(
+        &self,
+        id: String,
+        host: String,
+        port: u16,
+        key_type: String,
+        fingerprint: String,
+    );
     fn on_keyboard_interactive(
         &self,
         id: String,
