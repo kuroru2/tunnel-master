@@ -2,6 +2,19 @@ import SwiftUI
 
 struct TunnelListView: View {
     @Bindable var viewModel: TunnelViewModel
+    @State private var searchText = ""
+
+    private var filteredTunnels: [TunnelInfo] {
+        if searchText.isEmpty {
+            return viewModel.tunnels
+        }
+        let query = searchText.lowercased()
+        return viewModel.tunnels.filter {
+            $0.name.lowercased().contains(query) ||
+            $0.remoteHost.lowercased().contains(query) ||
+            String($0.localPort).contains(query)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,6 +33,31 @@ struct TunnelListView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
+            // Search
+            if viewModel.tunnels.count > 3 {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    TextField("Filter...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            }
+
             Divider()
 
             if viewModel.tunnels.isEmpty {
@@ -33,10 +71,19 @@ struct TunnelListView: View {
                     Spacer()
                 }
                 .frame(maxHeight: .infinity)
+            } else if filteredTunnels.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No matches for \"\(searchText)\"")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                    Spacer()
+                }
+                .frame(maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(viewModel.tunnels, id: \.id) { tunnel in
+                        ForEach(filteredTunnels, id: \.id) { tunnel in
                             TunnelRow(tunnel: tunnel, samples: viewModel.trafficHistory[tunnel.id] ?? [],
                                      onToggle: { viewModel.toggleConnection(id: tunnel.id) },
                                      onOpenTerminal: { viewModel.openTerminal(id: tunnel.id) })
@@ -66,7 +113,7 @@ struct TunnelListView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
         }
-        .onAppear {
+        .task {
             viewModel.start()
         }
     }
